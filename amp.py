@@ -13,16 +13,23 @@ class Amp:
         self.seq = 0x0C
 
     def handshake(self, path="handshake.txt"):
+        logs = self.handshake_log(path)
+        messages = []
+        for _, replies in logs:
+            messages.extend(replies)
+        return messages
+    
+    def handshake_log(self, path="handshake.txt"):
         messages = []
         with open(path) as f:
-            for line in f:
+            for number, line in enumerate(f):
                 strippedLine = line.strip()
                 if not strippedLine:
                     continue
                 self.send(bytes.fromhex(strippedLine))
-                messages.extend(self.read_messages())
+                messages.append((number, self.read_messages()))
         return messages
-    
+
     def send(self, data: bytes):
         bytesWritten= os.write(self.fd, data)
         if bytesWritten < len(data):

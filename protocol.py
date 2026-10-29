@@ -1,16 +1,20 @@
 import struct
 
 KNOWN_PARAMETERS = {
-    #0x02: "Tap",
+    (0x6c, 0x72, 3): "Tap (Hold)",
 
-    0x25: "Drive",
-    0x24: "Volume",
+    (0x74, 0x1a, 3): "FX Knob (FX1)", 
+    (0x74, 0x1c, 3): "FX Knob (FX2)", 
+    (0x74, 0x1e, 3): "FX Knob (FX3)",
 
-    0x48: "FX1",
-    0x47: "FX2",
-    0x46: "FX3",
+    (0x2a, 0x25, 0): "Drive",
+    (0x2a, 0x24, 0): "Tone (part)",
+    (0x74, 0x24, 3): "Volume",
+    (0x74, 0x20, 3): "Reverb",
 
-    0x1C: "FX"
+    (0x74, 0x48, 3): "FX1",
+    (0x74, 0x47, 3): "FX2",
+    (0x74, 0x46, 3): "FX3",
 }
 
 def decode_value(value):
@@ -34,12 +38,17 @@ def classify(msg):
     
     result = ("unknown", shape)
 
-    if (len(msg) == 45 and msg[11] == 0x07):
-        if (msg[13] == 0x04):
-            param_id = msg[26]
-            value = decode_value(msg[35:40])
-            result = ("param", param_id, value)
-        elif (msg[13] == 0x03 and msg[26] == 0x7F):
-            result = ("status",)  
+    if len(msg) == 45:
+        if (msg[11] == 0x07):
+            if (msg[13] == 0x04):
+                param_id = (msg[22], msg[26], msg[27])
+                value = decode_value(msg[35:40])
+                result = ("param", param_id, value)
+            elif (msg[13] == 0x03 and msg[26] == 0x7F):
+                result = ("status",)       
+    if 49 < len(msg) < 100:
+        if msg[13] == 1:
+            name = bytes(b for b in msg[49:-1] if 32 <= b < 127).decode()
+            result = ("preset_info", name, msg[40]) 
 
     return result
