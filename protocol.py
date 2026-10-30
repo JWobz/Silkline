@@ -1,4 +1,15 @@
+from enum import Enum
 import struct
+
+class MessageKind(Enum):
+    """ Enum for the different kinds of messages that can be received from the amp. """
+    PARAM = "param"
+    PRESET_INFO = "preset_info"
+    UNKNOWN = "unknown"
+    TAP = "tap"
+    SAVE = "save"
+    HEARTBEAT = "heartbeat"
+    STATUS = "status"
 
 KNOWN_PARAMETERS = {
     (0x6c, 0x72, 3): "Tap (Hold)",
@@ -31,24 +42,33 @@ def decode_value(value):
     return struct.unpack('<f', float_bytes)[0]
 
 def classify(msg):
-    if len(msg) >= 14:
-        shape = (len(msg), msg[11], msg[13])
-    else:
-        shape = (len(msg), None, None)
-    
-    result = ("unknown", shape)
+    """ Classify a message from the amp into a known type, if possible. Returns a tuple of (kind, *args) where kind is a MessageKind and args are additional data depending on the kind. """
+    length = len(msg)
+    shape = (length, msg[11], msg[13]) if length >= 14 else (length, None, None)
 
-    if len(msg) == 45:
-        if (msg[11] == 0x07):
-            if (msg[13] == 0x04):
-                param_id = (msg[22], msg[26], msg[27])
-                value = decode_value(msg[35:40])
-                result = ("param", param_id, value)
-            elif (msg[13] == 0x03 and msg[26] == 0x7F):
-                result = ("status",)       
-    if 49 < len(msg) < 100:
-        if msg[13] == 1:
-            name = bytes(b for b in msg[49:-1] if 32 <= b < 127).decode()
-            result = ("preset_info", name, msg[40]) 
+    # Tap message
+    if length == 37 and msg[11] == 0x0f and msg[13] == 5:
+        bpm = decode_value(msg[26:31]) * 2
+        return (MessageKind.TAP, bpm)
 
-    return result
+    # Length 45 messages (Params, Status, Save, Heartbeat)
+    if (length == 45 and msg[11] == 0x07):
+        if msg[13] == 0x04:
+            param_id = (msg[22], msg[26], msg[27])
+            value = decode_value(msg[35:40])
+            return (MessageKind.PARAM, param_id, value)
+        
+        if msg[13] == 0x03:
+            if msg[26] == 0x7F:
+                return (MessageKind.STATUS,)
+            elif msg[35] == 1:
+                return (MessageKind.SAVE,)
+            return (MessageKind.HEARTBEAT, msg[26])
+
+    # Preset info messages
+    if 49 < length < 100 and msg[13] == 1:
+        name = bytes(b for b in msg[49:-1] if 32 <= b < 127).decode()
+        return (MessageKind.PRESET_INFO, name, msg[40])
+
+    # Default fallback if nothing matches
+    return (MessageKind.UNKNOWN, shape)

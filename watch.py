@@ -1,37 +1,113 @@
 import sys
+
+from pathlib import Path
 from amp import Amp
-from protocol import KNOWN_PARAMETERS, classify
+from logger import Color, Logger
+from protocol import KNOWN_PARAMETERS, MessageKind, classify
 
-def connect():
-    print("Connecting to amp")
-    amp = Amp()
-    messages = amp.handshake()
-    with open(f"captures/{sys.argv[1]}", "w") as f:
-        for message in messages:
-            f.write(message.hex() + "\n")
-    print("Connected")
+CHANGE_THRESHOLD = 0.02
+QUIET_SHAPES = {(29, 11, 1)}  # the amp sends these by itself; show each shape once
 
-    try:
-        while True:
-            messages = amp.read_messages()
-            updates = {}
-            for message in messages:
-                translated_message = classify(message)
-                kind = translated_message[0]
-                if kind == "param":
-                    key, value = translated_message[1:]
-                    updates[key] = value
-                elif kind == "unknown":
-                    shape = translated_message[1]
-                    print(f"Unknown message shape: {shape} hex: {message.hex()}")
+class AmpWatcher:
+    """ Watches for messages from the amp and logs updates. """
+    def __init__(self, capture_filename: str = None):
+        self.capture_filename = capture_filename
+        self.logger = Logger(prefix="AmpWatcher")
+        self.last = {}
+        self.last_heartbeat = None
+        self.seen_shapes = set()
+        self.connected = False
+        self.amp = None
 
-            if (len(updates) > 0):
-                line = ", ".join(f"{KNOWN_PARAMETERS.get(k, f"Unfound {"/".join(f"{x:02X}" for x in k)}")}={v}" for k, v in sorted(updates.items()))
-                print(line)
-    except KeyboardInterrupt:
-        print("\nStopping")
-    finally:
-        amp.close()
+    def run(self):
+        """ Default entry point for the watcher. Connects to the amp and starts watching for messages. """
+        self.connect()
+        self.watch()
+
+    def connect(self):
+        """ Connects to the amp and performs a handshake. """
+        self.logger.warning("Connecting to amp...")
+        self.amp = Amp()
+        try:
+            messages = self.amp.handshake()
+            if self.capture_filename:
+                self.save_handshake(messages)
+            self.logger.success("Connected to amp successfully.")
+            self.connected = True
+        except Exception:
+            self.amp.close()
+            raise
+
+    def watch(self):
+        """ Listens for messages from the amp and logs updates. """
+        if not self.connected or self.amp is None:
+            raise RuntimeError("Not connected to amp")
+        
+        self.logger.info("Listening for updates...")
+        try:
+            while True:
+                updates = {}
+                for message in self.amp.read_messages():
+                    result = classify(message)
+
+                    match result:
+                        case (MessageKind.PARAM, key, value):
+                            if key not in self.last or abs(value - self.last[key]) >= CHANGE_THRESHOLD:
+                                self.last[key] = value
+                                updates[key] = value
+                        case (MessageKind.PRESET_INFO, name, fingerprint):
+                            self.logger.preset(f"Preset: {name!r} (fp=0x{fingerprint:02X}, len {len(message)}) hex: {message.hex()}")
+                        case (MessageKind.UNKNOWN.value, shape):
+                            if shape in QUIET_SHAPES:
+                                if shape in self.seen_shapes:
+                                    continue
+                                self.seen_shapes.add(shape)
+                            self.logger.error(f"Unknown message shape: {shape} hex: {message.hex()}")
+                        case (MessageKind.TAP, bpm):
+                            self.logger.preset(f"Tap message: {bpm:.3f} bpm")
+                        case (MessageKind.SAVE,):
+                            self.logger.preset("Save message received")
+                        case (MessageKind.HEARTBEAT, heartbeat):
+                            if (self.last_heartbeat is None or heartbeat != self.last_heartbeat):
+                                self.last_heartbeat = heartbeat
+                                self.logger.debug(f"Heartbeat: {heartbeat}")
+
+                if updates:
+                    self.logger.preset(", ".join(f"{self.name_for(k)}={v:.3f}" for k, v in sorted(updates.items())))
+        except KeyboardInterrupt:
+            self.logger.warning("Stopping...")
+        finally:
+            self.amp.close()
+
+    def name_for(self, key):
+        """ Finds a human-readable name for a parameter key, or returns a hex representation if not found. """
+        name = KNOWN_PARAMETERS.get(key)
+        if name is None:
+            name = "Unfound " + "/".join(f"{x:02X}" for x in key)
+        return name
+
+    def save_handshake(self, messages):
+        """Saves the handshake messages to a file, if a capture filename was provided."""
+        filepath = Path("captures") / self.capture_filename
+
+        if filepath.exists():
+            while True:
+                response = input(f"Capture file {self.capture_filename} already exists. Overwrite? (y/n): ").strip().lower()
+                if response in ("y", "yes"):
+                    break
+                elif response in ("n", "no", ''):
+                    self.logger.warning("Not overwriting capture file; handshake messages will not be saved.")
+                    return
+                else:
+                    print("Please enter 'y' or 'n'.")
+        try:
+            with open(filepath, "w") as f:
+                for message in messages:
+                    f.write(message.hex() + "\n")
+        except Exception as e:
+            self.logger.error(f"Failed to save handshake messages to {filepath}: {e}")
 
 if __name__ == "__main__":
-    connect()
+    capture_file = sys.argv[1] if len(sys.argv) > 1 else None
+    watcher = AmpWatcher(capture_file)
+    watcher.run()

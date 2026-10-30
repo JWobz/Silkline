@@ -1,18 +1,32 @@
-import os, select, time
+import os, select, time, mido
 
-DEFAULTDEVICE = "/dev/snd/midiC3D0"
+SPIDER_KEYWORD = "spider"
 BYTE_HEADER = bytes.fromhex("F0 00 01 0C 22 05 4D 00")
 BEGIN_LENGTH = 29
 SET_VALUE_LENGTH = 37
 
 class Amp:
-    def __init__(self, path=DEFAULTDEVICE):
-        self.fd = os.open(path, os.O_RDWR | os.O_NONBLOCK)
+    """ Represents a connection to the amp. """
+    def __init__(self):
+        print("Searching for amp...")
+        amp_port = self.find_amp_port()
+        self.fd = os.open(amp_port, os.O_RDWR | os.O_NONBLOCK)
         self.buf = bytearray()
-        self.device = path
+        self.device = amp_port
         self.seq = 0x0C
 
+    def find_amp_port(self):
+        """ Get all availible input/output port names """
+        ports = mido.get_input_names()
+
+        for port in ports:
+            if SPIDER_KEYWORD.lower() in port.lower():
+                print(f"Found amp port: {port}")
+                return port
+        raise RuntimeError("Could not find amp port. Please check that the amp is connected and powered on.")
+
     def handshake(self, path="handshake.txt"):
+        """ Performs a handshake with the amp and returns the messages received during the handshake. If a path is provided, it will also save the handshake messages to that file. """
         logs = self.handshake_log(path)
         messages = []
         for _, replies in logs:
@@ -20,6 +34,7 @@ class Amp:
         return messages
     
     def handshake_log(self, path="handshake.txt"):
+        """ Performs a handshake with the amp and returns a list of tuples containing the line number and the messages received for each line sent. If a path is provided, it will also save the handshake messages to that file. """
         messages = []
         with open(path) as f:
             for number, line in enumerate(f):
@@ -29,13 +44,14 @@ class Amp:
                 self.send(bytes.fromhex(strippedLine))
                 messages.append((number, self.read_messages()))
         return messages
-
-    def send(self, data: bytes):
-        bytesWritten= os.write(self.fd, data)
-        if bytesWritten < len(data):
-            raise IOError(f"Failed to write all bytes to {self.device}: {bytesWritten} of {len(data)}")
     
+    def close(self):
+        """ Closes the connection to the amp. """
+        os.close(self.fd)
+        self.fd = None
+
     def read_messages(self, quiet=0.05, limit=1.0):
+        """ Reads messages from the amp until a quiet period of `quiet` seconds is observed or a total of `limit` seconds has passed. Returns a list of complete messages received. """
         msgs, end, last = [], time.time() + limit, time.time()
         while time.time() < end and time.time() - last < quiet:
             r, _, _ = select.select([self.fd], [], [], 0.01)
@@ -53,11 +69,14 @@ class Amp:
                 del self.buf[:i + 1]
         return msgs
     
-    def close(self):
-        os.close(self.fd)
-        self.fd = None
+    def send(self, data: bytes):
+        """ Sends a message to the amp. """
+        bytesWritten= os.write(self.fd, data)
+        if bytesWritten < len(data):
+            raise IOError(f"Failed to write all bytes to {self.device}: {bytesWritten} of {len(data)}")
     
     def set_raw(self, param_id, raw5):
+        """ Sets a parameter on the amp using a raw five-byte value. """
         self.send(self.begin_message())
         self.read_messages()
 
@@ -70,6 +89,7 @@ class Amp:
         self.seq = (self.seq + 2) % 128
 
     def begin_message(self):
+        """ Constructs the beginning message for a parameter set operation. """
         seq = bytes([self.seq])
         fixed = bytes.fromhex("00 00 07 00 0A 00 00 00 10")
         zeros = bytes(10)
@@ -80,10 +100,3 @@ class Amp:
             raise ValueError(f"BEGIN_LENGTH mismatch: {len(begin)} != {BEGIN_LENGTH}")
 
         return begin
-
-if __name__ == "__main__":
-    amp = Amp()
-    print(amp.handshake())
-    amp.set_raw(0x25, bytes.fromhex("022B40203D"))
-    for msg in amp.read_messages():
-        print(msg.hex(" "))
