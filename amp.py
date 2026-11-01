@@ -1,29 +1,33 @@
-import os, select, time, mido
+import os, select, time
 
-SPIDER_KEYWORD = "spider"
-BYTE_HEADER = bytes.fromhex("F0 00 01 0C 22 05 4D 00")
-BEGIN_LENGTH = 29
-SET_VALUE_LENGTH = 37
+import protocol
+
+from transport import AmpTransport
+from utils import find_amp_port
+from logger import Logger
+
 
 class Amp:
     """ Represents a connection to the amp. """
     def __init__(self):
         print("Searching for amp...")
-        amp_port = self.find_amp_port()
-        self.fd = os.open(amp_port, os.O_RDWR | os.O_NONBLOCK)
-        self.buf = bytearray()
-        self.device = amp_port
+        self.device = find_amp_port()
+        self.transport = AmpTransport(self.device)
         self.seq = 0x0C
+        self.connected = False
+        self.logger = Logger(prefix="Amp")
 
-    def find_amp_port(self):
-        """ Get all availible input/output port names """
-        ports = mido.get_input_names()
-
-        for port in ports:
-            if SPIDER_KEYWORD.lower() in port.lower():
-                print(f"Found amp port: {port}")
-                return port
-        raise RuntimeError("Could not find amp port. Please check that the amp is connected and powered on.")
+    def connect(self):
+        """ Connects to the amp and performs a handshake. """
+        self.logger.warning("Connecting to amp...")
+        try:
+            messages = self.handshake()
+            self.logger.success("Connected to amp successfully.")
+            self.connected = True
+        except Exception:
+            self.close()
+            raise
+        return messages    
 
     def handshake(self, path="handshake.txt"):
         """ Performs a handshake with the amp and returns the messages received during the handshake. If a path is provided, it will also save the handshake messages to that file. """
@@ -41,62 +45,32 @@ class Amp:
                 strippedLine = line.strip()
                 if not strippedLine:
                     continue
-                self.send(bytes.fromhex(strippedLine))
-                messages.append((number, self.read_messages()))
+                self.transport.send(bytes.fromhex(strippedLine))
+                messages.append((number, self.transport.read_messages()))
         return messages
     
     def close(self):
         """ Closes the connection to the amp. """
-        os.close(self.fd)
-        self.fd = None
-
-    def read_messages(self, quiet=0.05, limit=1.0):
-        """ Reads messages from the amp until a quiet period of `quiet` seconds is observed or a total of `limit` seconds has passed. Returns a list of complete messages received. """
-        msgs, end, last = [], time.time() + limit, time.time()
-        while time.time() < end and time.time() - last < quiet:
-            r, _, _ = select.select([self.fd], [], [], 0.01)
-            if r:
-                try:
-                    chunk = os.read(self.fd, 4096)
-                except BlockingIOError:
-                    continue
-                if chunk:
-                    self.buf += chunk
-                    last = time.time()
-            while 0xF7 in self.buf:
-                i = self.buf.index(0xF7)
-                msgs.append(bytes(self.buf[:i + 1]))
-                del self.buf[:i + 1]
-        return msgs
+        self.transport.close()
+        self.connected = False
     
-    def send(self, data: bytes):
-        """ Sends a message to the amp. """
-        bytesWritten= os.write(self.fd, data)
-        if bytesWritten < len(data):
-            raise IOError(f"Failed to write all bytes to {self.device}: {bytesWritten} of {len(data)}")
-    
-    def set_raw(self, param_id, raw5):
-        """ Sets a parameter on the amp using a raw five-byte value. """
-        self.send(self.begin_message())
-        self.read_messages()
+    def set_raw(self, block, sub, param_id, raw5, unknown=1):
+        """ Sets a parameter using a raw five-byte value. Returns the amp's replies. """
+        replies = []
+        self.transport.send(protocol.build_begin_message(self.seq))
+        replies += self.transport.read_messages()
 
-        value = BYTE_HEADER + bytes([self.seq+1]) + bytes.fromhex("00 00 0F 00 2A 00 00 00") + bytes([param_id]) + bytes.fromhex("00 00 01 00 04 00 00 00") + raw5 + bytes(5) + bytes([0xF7])
-        if len(value) != SET_VALUE_LENGTH:
-            raise ValueError(f"SET_VALUE_LENGTH mismatch: {len(value)} != {SET_VALUE_LENGTH}")
-        
-        self.send(value)
-        self.read_messages()
+        self.transport.send(protocol.build_set_message(
+            self.seq + 1, block, sub, param_id, raw5, unknown
+        ))
+        replies += self.transport.read_messages()
         self.seq = (self.seq + 2) % 128
+        return replies
 
-    def begin_message(self):
-        """ Constructs the beginning message for a parameter set operation. """
-        seq = bytes([self.seq])
-        fixed = bytes.fromhex("00 00 07 00 0A 00 00 00 10")
-        zeros = bytes(10)
-        end = bytes([0xF7])
-
-        begin = BYTE_HEADER + seq + fixed + zeros + end
-        if len(begin) != BEGIN_LENGTH:
-            raise ValueError(f"BEGIN_LENGTH mismatch: {len(begin)} != {BEGIN_LENGTH}")
-
-        return begin
+    def set_parameter(self, param, value):
+        """ Sets a parameter by name to a given value between 0 and 1. """
+        if not param.settable:
+            raise ValueError(f"Parameter {param.name} is not settable.")
+        if not (0 <= value <= 1):
+            raise ValueError(f"Value must be between 0 and 1, got {value}")
+        return self.set_raw(param.block, param.sub, param.id, protocol.encode_set_value(value))

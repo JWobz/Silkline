@@ -10,44 +10,30 @@ QUIET_SHAPES = {(29, 11, 1)}  # the amp sends these by itself; show each shape o
 
 class AmpWatcher:
     """ Watches for messages from the amp and logs updates. """
-    def __init__(self, capture_filename: str = None):
+    def __init__(self, capture_filename: str | None = None):
         self.capture_filename = capture_filename
         self.logger = Logger(prefix="AmpWatcher")
         self.last = {}
         self.last_heartbeat = None
         self.seen_shapes = set()
-        self.connected = False
         self.amp = None
 
     def run(self):
         """ Default entry point for the watcher. Connects to the amp and starts watching for messages. """
-        self.connect()
-        self.watch()
-
-    def connect(self):
-        """ Connects to the amp and performs a handshake. """
-        self.logger.warning("Connecting to amp...")
         self.amp = Amp()
-        try:
-            messages = self.amp.handshake()
-            if self.capture_filename:
-                self.save_handshake(messages)
-            self.logger.success("Connected to amp successfully.")
-            self.connected = True
-        except Exception:
-            self.amp.close()
-            raise
+        self.save_handshake(self.amp.connect())
+        self.watch()
 
     def watch(self):
         """ Listens for messages from the amp and logs updates. """
-        if not self.connected or self.amp is None:
+        if self.amp is None or not self.amp.connected:
             raise RuntimeError("Not connected to amp")
         
         self.logger.info("Listening for updates...")
         try:
             while True:
                 updates = {}
-                for message in self.amp.read_messages():
+                for message in self.amp.transport.read_messages():
                     result = classify(message)
 
                     match result:
@@ -57,7 +43,7 @@ class AmpWatcher:
                                 updates[key] = value
                         case (MessageKind.PRESET_INFO, name, fingerprint):
                             self.logger.preset(f"Preset: {name!r} (fp=0x{fingerprint:02X}, len {len(message)}) hex: {message.hex()}")
-                        case (MessageKind.UNKNOWN.value, shape):
+                        case (MessageKind.UNKNOWN, shape):
                             if shape in QUIET_SHAPES:
                                 if shape in self.seen_shapes:
                                     continue
@@ -88,6 +74,9 @@ class AmpWatcher:
 
     def save_handshake(self, messages):
         """Saves the handshake messages to a file, if a capture filename was provided."""
+        if self.capture_filename is None:
+            return
+
         filepath = Path("captures") / self.capture_filename
 
         if filepath.exists():
