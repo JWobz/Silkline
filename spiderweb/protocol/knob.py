@@ -1,0 +1,26 @@
+POSITIONS = 16
+
+
+def settle_position(candidates, previous):
+    """Picks the real preset-knob position from the values seen during one click.
+
+    The knob's contacts bounce, and a stray reading is the 4-bit complement of a real
+    one (see protocol.md section 11). So each candidate could also be its complement.
+    A single click moves one step, so prefer a position one step from `previous`.
+    Falls back to the last candidate when that doesn't settle it.
+    """
+    if not candidates:
+        return previous
+    if previous is None:
+        return candidates[-1]
+    for position in reversed(candidates):
+        for option in (position, complement_position(position)):
+            if (option - previous) % POSITIONS in (1, POSITIONS - 1):
+                return option
+    return candidates[-1]
+
+
+def complement_position(position):
+    """The position a bounced reading of `position` would give (raw value XOR 0x0F)."""
+    raw = (position + 8) % POSITIONS
+    return ((raw ^ 0x0F) - 8) % POSITIONS

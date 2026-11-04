@@ -1,8 +1,8 @@
 import sys
-import protocol
+import spiderweb.protocol as protocol
 
-from amp import Amp
-from logger import Logger
+from spiderweb.amp import Amp
+from spiderweb.logger import Logger
 
 def main():
     logger = Logger(prefix="send")

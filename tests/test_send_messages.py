@@ -1,7 +1,7 @@
 import unittest
 
-from amp import Amp
-from protocol import BYTE_HEADER, BEGIN_LENGTH, SET_VALUE_LENGTH, encode_set_value
+from spiderweb.amp import Amp
+from spiderweb.protocol import BYTE_HEADER, BEGIN_LENGTH, SET_VALUE_LENGTH, encode_set_value
 
 
 class FakeAmp(Amp):

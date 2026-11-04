@@ -1,4 +1,4 @@
-from amp import Amp
+from spiderweb.amp import Amp
 
 DUMP_REQUEST = bytes.fromhex(
     "f000010c22054d010200000b000b0000000400003c007f7f7f7f0000f7"
@@ -19,5 +19,3 @@ def main():
         amp.close()
 
 
-if __name__ == "__main__":
-    main()

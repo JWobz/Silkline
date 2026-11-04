@@ -1,5 +1,5 @@
 import unittest
-from protocol import (
+from spiderweb.protocol import (
     MessageKind,
     BEGIN_LENGTH,
     BYTE_HEADER,
@@ -89,11 +89,31 @@ class TestProtocol(unittest.TestCase):
         )
         self.assertEqual(classify(msg), (MessageKind.SAVE,))
 
-    def test_heartbeat_message(self):
-        msg = bytes.fromhex(
-            "f000010c22054d00060001070003000000100000000002000000070000000002000000000000000000000000f7"
+    def test_preset_change_messages(self):
+        # Real preset-knob clicks from captures/preset_clicks.txt.
+        # The raw value at msg[26] is the knob position plus 8, wrapped at 16.
+        cases = [
+            ("f000010c22054d002f0001070003000000100000000002000000080000000002000000000000000000000000f7", 0),   # raw 8
+            ("f000010c22054d000b0001070003000000100000000002000000050000000002000000000000000000000000f7", 13),  # raw 5
+            ("f000010c22054d001e0001070003000000100000000002000000000000000002000000000000000000000000f7", 8),   # raw 0
+            ("f000010c22054d00060001070003000000100000000002000000070000000002000000000000000000000000f7", 15),  # raw 7
+        ]
+        for hex_text, position in cases:
+            with self.subTest(position=position):
+                self.assertEqual(classify(bytes.fromhex(hex_text)), (MessageKind.PRESET_CHANGE, position))
+
+    def test_preset_change_covers_all_positions(self):
+        # Every raw value 0 to 15 maps to a different position 0 to 15.
+        base = bytearray.fromhex(
+            "f000010c22054d002f0001070003000000100000000002000000080000000002000000000000000000000000f7"
         )
-        self.assertEqual(classify(msg), (MessageKind.HEARTBEAT, 7))
+        positions = set()
+        for raw in range(16):
+            base[26] = raw
+            kind, position = classify(bytes(base))
+            self.assertEqual(kind, MessageKind.PRESET_CHANGE)
+            positions.add(position)
+        self.assertEqual(positions, set(range(16)))
 
     def test_status_message_is_not_save(self):
         # A status message also has msg[35] == 1, so the 0x7F check must come first.

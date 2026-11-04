@@ -1,5 +1,6 @@
 import time
 
+
 class Color:
     """ Represents a color in the log output. """
     RESET = "\033[0m"

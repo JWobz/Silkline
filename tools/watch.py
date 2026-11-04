@@ -1,9 +1,9 @@
 import sys
 
 from pathlib import Path
-from amp import Amp
-from logger import Color, Logger
-from protocol import KNOWN_PARAMETERS, MessageKind, classify
+from spiderweb.amp import Amp
+from spiderweb.logger import Color, Logger
+from spiderweb.protocol import KNOWN_PARAMETERS, MessageKind, classify
 
 CHANGE_THRESHOLD = 0.02
 QUIET_SHAPES = {(29, 11, 1)}  # the amp sends these by itself; show each shape once
@@ -14,7 +14,7 @@ class AmpWatcher:
         self.capture_filename = capture_filename
         self.logger = Logger(prefix="AmpWatcher")
         self.last = {}
-        self.last_heartbeat = None
+        self.last_preset = None
         self.seen_shapes = set()
         self.amp = None
 
@@ -37,26 +37,30 @@ class AmpWatcher:
                     result = classify(message)
 
                     match result:
+                        case (MessageKind.PRESET_INFO, name, fingerprint):
+                            self.logger.preset(f"Preset: {name!r} (fp=0x{fingerprint:02X}, len {len(message)}) hex: {message.hex()}")
+                        case (MessageKind.PRESET_CHANGE, preset):
+                            if (self.last_preset is None or preset != self.last_preset):
+                                self.last_preset = preset
+                                self.logger.debug(f"Preset change: {preset} hex: {message.hex()}")
+                        case (MessageKind.PARAM, (0x2A, 0x02, 0), _):
+                            self.logger.info(f"2A/02 raw bytes: {message[35:40].hex()}")
                         case (MessageKind.PARAM, key, value):
                             if key not in self.last or abs(value - self.last[key]) >= CHANGE_THRESHOLD:
                                 self.last[key] = value
                                 updates[key] = value
-                        case (MessageKind.PRESET_INFO, name, fingerprint):
-                            self.logger.preset(f"Preset: {name!r} (fp=0x{fingerprint:02X}, len {len(message)}) hex: {message.hex()}")
+                        case (MessageKind.TAP, bpm):
+                            self.logger.preset(f"Tap message: {bpm:.3f} bpm")
+                        case (MessageKind.SAVE,):
+                            self.logger.preset("Save message received")
+                        case (MessageKind.STATUS,):
+                            self.logger.debug(f"Status message received hex: {message.hex()}")
                         case (MessageKind.UNKNOWN, shape):
                             if shape in QUIET_SHAPES:
                                 if shape in self.seen_shapes:
                                     continue
                                 self.seen_shapes.add(shape)
                             self.logger.error(f"Unknown message shape: {shape} hex: {message.hex()}")
-                        case (MessageKind.TAP, bpm):
-                            self.logger.preset(f"Tap message: {bpm:.3f} bpm")
-                        case (MessageKind.SAVE,):
-                            self.logger.preset("Save message received")
-                        case (MessageKind.HEARTBEAT, heartbeat):
-                            if (self.last_heartbeat is None or heartbeat != self.last_heartbeat):
-                                self.last_heartbeat = heartbeat
-                                self.logger.debug(f"Heartbeat: {heartbeat}")
 
                 if updates:
                     self.logger.preset(", ".join(f"{self.name_for(k)}={v:.3f}" for k, v in sorted(updates.items())))
