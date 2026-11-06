@@ -11,7 +11,8 @@ this runs.
 import sys
 from pathlib import Path
 
-from spiderweb.amp import Amp
+from spiderweb.amp import Amp, load_handshake
+from spiderweb.connection import Connection
 
 DUMP_CHUNK_LENGTH = 309
 DUMP_CHUNK_COUNT = 5
@@ -26,17 +27,22 @@ def main():
         raise SystemExit(f"{path} already exists; pick a new name so nothing is overwritten.")
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    amp = Amp()
+    amp = Amp(Connection(load_handshake()))
     try:
-        messages = amp.connect()
+        groups = amp.connect()          # one list of replies per handshake line
+        messages = [message for group in groups for message in group]
 
         chunks = 0
+        number = 0
         with open(path, "x") as f:
-            for number, message in enumerate(messages):
-                f.write(f"{message.hex()}\n")
-                if len(message) == DUMP_CHUNK_LENGTH:
-                    chunks += 1
-                    print(f"  message {number}: {len(message)} bytes (dump chunk {chunks})")
+            for line_number, group in enumerate(groups, 1):
+                f.write(f"# handshake line {line_number} ({len(group)} {'reply' if len(group) == 1 else 'replies'})\n")
+                for message in group:
+                    f.write(f"{message.hex()}\n")
+                    if len(message) == DUMP_CHUNK_LENGTH:
+                        chunks += 1
+                        print(f"  message {number}: {len(message)} bytes (dump chunk {chunks})")
+                    number += 1
     finally:
         amp.close()
 

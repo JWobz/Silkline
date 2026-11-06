@@ -5,18 +5,24 @@ Usage (from the project root):
 """
 import time
 
-from spiderweb.amp import Amp
+from spiderweb.amp import Amp, load_handshake
+from spiderweb.connection import Connection
+
+
+def show(m):
+    shape = (len(m), m[11] if len(m) > 11 else None, m[13] if len(m) > 13 else None)
+    print(time.strftime("%H:%M:%S"), shape, m.hex()[:90], flush=True)
 
 
 def main():
-    amp = Amp()
+    amp = Amp(Connection(load_handshake()))
+    amp.add_listener(show)
+    amp.on_lost(lambda error: print(f"Lost the amp: {error!r}. Ctrl-C to stop.", flush=True))
     try:
-        amp.handshake()
-        print("Listening. Ctrl-C to stop.")
+        amp.connect()
+        print("Listening. Ctrl-C to stop.", flush=True)
         while True:
-            for m in amp.transport.read_messages():
-                shape = (len(m), m[11] if len(m) > 11 else None, m[13] if len(m) > 13 else None)
-                print(time.strftime("%H:%M:%S"), shape, m.hex()[:90])
+            time.sleep(1)          # the connection's reader thread does the work
     except KeyboardInterrupt:
         pass
     finally:

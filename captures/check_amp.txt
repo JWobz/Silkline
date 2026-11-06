@@ -1,0 +1,44 @@
+20:22:36 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+20:22:51 event connection_changed {'state': <ConnectionState.CONNECTED: 'connected'>}
+20:22:51 RESULT connect: PASS - connected in 14.3s, preset 'Jungle $lash' from the handshake dump
+20:23:14 you typed 's' for: Is 'Jungle $lash' the preset showing on the amp? (y/n)
+20:23:14 RESULT connect name: FAIL - you said 's'
+20:23:14 RESULT preset list: PASS - all 128 names: 0 'Bass', 20 '90s SLO', 124 'User 1'
+20:23:37 you typed '' for: Press Enter to start (s to skip):
+20:23:37 raw  29 f000010c22054d000800000b00010000000400003c007f7f7f7f0000f7
+20:23:39 RESULT set 0.2: FAIL - no Drive report within 2.0s
+20:23:40 RESULT get after set 0.2: CHECK - service.get('drive') = None
+20:23:41 raw  29 f000010c22054d000900000b00010000000400003c007f7f7f7f0000f7
+20:23:43 RESULT set 0.8: FAIL - no Drive report within 2.0s
+20:23:44 RESULT get after set 0.8: CHECK - service.get('drive') = None
+20:24:04 you typed 'n' for: Did you hear the drive change both times? (y/n)
+20:24:04 RESULT set by ear: FAIL - you said 'n'
+20:24:14 you typed 's' for: Press Enter to start (s to skip):
+20:24:23 you typed 's' for: Press Enter to start (s to skip):
+20:24:34 you typed '' for: Press Enter to start (s to skip):
+20:24:39 raw  45 f000010c22054d000a0001070003000000100000000002000000090000000002000000000000000000000000f7
+20:24:41 raw  45 f000010c22054d000b00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:24:41 event knob_moved {'position': 1}
+20:24:41 RESULT knob position: PASS - settled at position 1
+20:24:41 event preset_changed {'number': None, 'name': 'Chunk 2: Phat Chunk'}
+20:24:41 RESULT knob name: PASS - refreshed to 'Chunk 2: Phat Chunk'
+20:24:50 you typed 's' for: Is 'Chunk 2: Phat Chunk' the preset now showing on the amp? (y/n)
+20:24:50 RESULT knob name by eye: FAIL - you said 's'
+20:24:58 you typed '' for: Press Enter to start (s to skip):
+20:25:08 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>, 'error': "OSError(19, 'No such device')"}
+20:25:08 RESULT unplug: PASS - noticed: OSError(19, 'No such device')
+20:25:08 RESULT command after unplug: PASS - AmpDisconnected: not connected
+20:25:08 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+20:25:08 PASS  connect: connected in 14.3s, preset 'Jungle $lash' from the handshake dump
+20:25:08 FAIL  connect name: you said 's'
+20:25:08 PASS  preset list: all 128 names: 0 'Bass', 20 '90s SLO', 124 'User 1'
+20:25:08 FAIL  set 0.2: no Drive report within 2.0s
+20:25:08 CHECK get after set 0.2: service.get('drive') = None
+20:25:08 FAIL  set 0.8: no Drive report within 2.0s
+20:25:08 CHECK get after set 0.8: service.get('drive') = None
+20:25:08 FAIL  set by ear: you said 'n'
+20:25:08 PASS  knob position: settled at position 1
+20:25:08 PASS  knob name: refreshed to 'Chunk 2: Phat Chunk'
+20:25:08 FAIL  knob name by eye: you said 's'
+20:25:08 PASS  unplug: noticed: OSError(19, 'No such device')
+20:25:08 PASS  command after unplug: AmpDisconnected: not connected

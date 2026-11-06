@@ -1,0 +1,91 @@
+20:50:02 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+20:50:16 event connection_changed {'state': <ConnectionState.CONNECTED: 'connected'>}
+20:50:16 RESULT connect: PASS - connected in 14.2s, preset 'Chunk 2: Phat Chunk' from the handshake dump
+20:50:34 you typed '1' for: Which position (1-16) is the preset knob at?
+20:50:34 RESULT connect knob: INFO - 'Chunk 2: Phat Chunk' loaded with the knob at '1'
+20:50:34 RESULT preset list: PASS - all 128 names: 0 'Bass', 20 '90s SLO', 124 'User 1'
+20:50:52 you typed '' for: Press Enter to start (s to skip):
+20:50:52 raw  29 f000010c22054d000900000b00010000000400000000000000000000f7
+20:50:52 RESULT set 0.2: PASS - the amp answered after 0.00s
+20:50:53 RESULT get after set 0.2: INFO - service.get('drive') = None
+20:50:54 raw  45 f000010c22054d000a00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:50:55 raw  29 f000010c22054d000b00000b00010000000400000000000000000000f7
+20:50:55 RESULT set 0.8: PASS - the amp answered after 0.00s
+20:50:56 RESULT get after set 0.8: INFO - service.get('drive') = None
+20:50:57 raw  45 f000010c22054d000c00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:51:02 you typed 'y' for: Did you hear the drive change both times? (y/n)
+20:51:02 RESULT set by ear: PASS - you said 'y'
+20:51:12 you typed '' for: Press Enter to start (s to skip):
+20:51:12 raw  29 f000010c22054d017500000b00010000000400000000000000000000f7
+20:51:12 raw  45 f000010c22054d000d00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:51:12 event preset_changed {'number': 4, 'name': 'Chime 1: Class-A'}
+20:51:12 RESULT select 4: PASS - 'Chime 1: Class-A' in 0.42s (expected 'Chime 1: Class-A')
+20:51:14 raw  29 f000010c22054d017700000b00010000000400000000000000000000f7
+20:51:15 raw  45 f000010c22054d000e00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:51:15 event preset_changed {'number': 8, 'name': 'Jungle $lash'}
+20:51:15 RESULT select 8: PASS - 'Jungle $lash' in 0.41s (expected 'Jungle $lash')
+20:51:38 you typed '' for: Did the sound change both times? (y/n)
+20:51:38 RESULT select by ear: FAIL - you said ''
+20:51:58 you typed '' for: Press Enter to start (s to skip):
+20:51:58 raw  29 f000010c22054d017900000b00010000000400000000000000000000f7
+20:51:58 raw  45 f000010c22054d000f00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:51:58 event preset_changed {'number': 21, 'name': 'Angel P-Ball'}
+20:51:58 RESULT preset 21: PASS - loaded 'Angel P-Ball', the list says 'Angel P-Ball'
+20:52:01 raw  29 f000010c22054d017b00000b00010000000400000000000000000000f7
+20:52:02 raw  45 f000010c22054d001000010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:52:02 event preset_changed {'number': 60, 'name': 'The Trooper'}
+20:52:02 RESULT preset 60: PASS - loaded 'The Trooper', the list says 'The Trooper'
+20:52:05 raw  29 f000010c22054d017d00000b00010000000400000000000000000000f7
+20:52:05 raw  45 f000010c22054d001100010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:52:05 event preset_changed {'number': 114, 'name': 'AmbientAco'}
+20:52:05 RESULT preset 114: PASS - loaded 'AmbientAco', the list says 'AmbientAco'
+20:52:08 raw  29 f000010c22054d017f00000b00010000000400000000000000000000f7
+20:52:08 raw  45 f000010c22054d001200010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:52:12 RESULT preset 115: FAIL - AmpTimeout: no complete reply within 4.0s
+20:52:12 raw  29 f000010c22054d010100000b00010000000400000000000000000000f7
+20:52:13 raw  45 f000010c22054d001300010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:52:13 event preset_changed {'number': 124, 'name': 'User 1'}
+20:52:13 RESULT preset 124: PASS - loaded 'User 1', the list says 'User 1'
+20:52:16 raw  29 f000010c22054d010300000b00010000000400000000000000000000f7
+20:52:16 raw  45 f000010c22054d001400010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:52:16 event preset_changed {'number': 127, 'name': 'User 4'}
+20:52:16 RESULT preset 127: PASS - loaded 'User 4', the list says 'User 4'
+20:52:28 you typed 'y' for: Did the sound change with each one? (y/n)
+20:52:28 RESULT presets by ear: PASS - you said 'y'
+20:52:40 you typed '' for: Press Enter to start (s to skip):
+20:52:42 raw  45 f000010c22054d001500010700030000001000000000020000000a0000000002000000000000000000000000f7
+20:52:44 raw  45 f000010c22054d001600010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:52:44 event knob_moved {'position': 2}
+20:52:44 RESULT knob position: PASS - settled at position 2
+20:52:44 event preset_changed {'number': None, 'name': 'Insane 1: Lunatic'}
+20:52:44 RESULT knob name: PASS - refreshed to 'Insane 1: Lunatic'
+20:52:50 you typed '2' for: Which position (1-16) is the preset knob at now?
+20:52:50 RESULT knob by hand: INFO - reported position 2 (0-15), you said '2', name 'Insane 1: Lunatic'
+20:53:01 you typed '' for: Press Enter to start (s to skip):
+20:53:04 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>, 'error': "OSError(19, 'No such device')"}
+20:53:04 RESULT unplug: PASS - noticed: OSError(19, 'No such device')
+20:53:04 RESULT command after unplug: PASS - AmpDisconnected: not connected
+20:53:04 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+20:53:04 PASS  connect: connected in 14.2s, preset 'Chunk 2: Phat Chunk' from the handshake dump
+20:53:04 INFO  connect knob: 'Chunk 2: Phat Chunk' loaded with the knob at '1'
+20:53:04 PASS  preset list: all 128 names: 0 'Bass', 20 '90s SLO', 124 'User 1'
+20:53:04 PASS  set 0.2: the amp answered after 0.00s
+20:53:04 INFO  get after set 0.2: service.get('drive') = None
+20:53:04 PASS  set 0.8: the amp answered after 0.00s
+20:53:04 INFO  get after set 0.8: service.get('drive') = None
+20:53:04 PASS  set by ear: you said 'y'
+20:53:04 PASS  select 4: 'Chime 1: Class-A' in 0.42s (expected 'Chime 1: Class-A')
+20:53:04 PASS  select 8: 'Jungle $lash' in 0.41s (expected 'Jungle $lash')
+20:53:04 FAIL  select by ear: you said ''
+20:53:04 PASS  preset 21: loaded 'Angel P-Ball', the list says 'Angel P-Ball'
+20:53:04 PASS  preset 60: loaded 'The Trooper', the list says 'The Trooper'
+20:53:04 PASS  preset 114: loaded 'AmbientAco', the list says 'AmbientAco'
+20:53:04 FAIL  preset 115: AmpTimeout: no complete reply within 4.0s
+20:53:04 PASS  preset 124: loaded 'User 1', the list says 'User 1'
+20:53:04 PASS  preset 127: loaded 'User 4', the list says 'User 4'
+20:53:04 PASS  presets by ear: you said 'y'
+20:53:04 PASS  knob position: settled at position 2
+20:53:04 PASS  knob name: refreshed to 'Insane 1: Lunatic'
+20:53:04 INFO  knob by hand: reported position 2 (0-15), you said '2', name 'Insane 1: Lunatic'
+20:53:04 PASS  unplug: noticed: OSError(19, 'No such device')
+20:53:04 PASS  command after unplug: AmpDisconnected: not connected

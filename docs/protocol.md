@@ -2,7 +2,7 @@
 
 Working notes from reverse-engineering the amp over USB-MIDI. Status tags:
 **confirmed** = tested on the amp, **inferred** = a guess that fits the data,
-**unknown** = not understood yet. Last updated 2026-11-03.
+**unknown** = not understood yet. Last updated 2026-11-06.
 
 ## 1. Connection
 
@@ -27,15 +27,17 @@ Working notes from reverse-engineering the amp over USB-MIDI. Status tags:
   17-byte identity reply and a 48-byte reply containing the text `L6ImageType:main`
   and `L6Version:2.0.0.0.0`.
 - Of the 258 messages, 242 are preset-list requests (shape `(29, 0x0B, 0x06)` x127
-  and `(29, 0x0B, 0x0E)` x115). Their replies are the preset-info messages that carry
-  the preset names (see section 4). The rest set up the session.
+  and `(29, 0x0B, 0x0E)` x115, preset index at `msg[22]`). Each gets one preset-entry
+  reply with that preset's name: section 4, "Preset list". The rest set up the session.
 - The app's own startup takes about 21 seconds, with a median 32 ms between messages.
   It always has a reply between two preset-list requests.
 - **Dump trigger (confirmed):** handshake line 8 on its own makes the amp send the
   current-preset dump:
   `f000010c22054d010200000b000b0000000400003c007f7f7f7f0000f7`
 - The counters in a fresh session start at 0. After the replayed handshake the
-  channel-0 counters end at 0x0B, so the Pi's own `seq` starts at 0x0C.
+  channel-0 counters ended at 0x0B in the first captures, so the Pi's own `seq` starts
+  at 0x0C. On 2026-11-06, two runs straight after a power-cycle ended at 0x07 and 0x08
+  instead, so the end point varies. It doesn't matter for sets (section 8).
 - After an unclean disconnect, a new session's first replies were seen with counters
   such as 0x07 or 0x09, so the amp seems to keep session state (**inferred**). See
   section 9 for the reliability problems.
@@ -82,6 +84,61 @@ What is known about the payload:
 - Candidate offsets matched by value to the exported preset (single matches in one
   capture, stable between two captures, **unconfirmed**): 685 = amp volume, 790 =
   FX1 Gain, 967 = FX3 Time, 1001 = FX3 "Eko dist", 1400 = EQ Low, 1423 = EQ LMid.
+### Parameters in the dump (2026-11-06, `tools/dump_params.py`, `captures/dump_params_5.txt`)
+
+Method: on presets 4, 8, 0 and 14, set each parameter to 0.5 then 0.75 and dump after
+each. Offsets below are into the **unpacked** data (each 309-byte chunk unpacked like a
+preset-list entry, section 4, then joined: 5 x 259 = 1295 bytes). Two dumps with no set
+in between were identical on all four presets, so nothing changes on its own while the
+knobs are left alone.
+
+- **The packing (confirmed 2026-11-06, `captures/dump_bits.txt`):** in each group of 8
+  bytes from `msg[12]`, the first byte holds the top bits of the next 7, **most
+  significant first: data byte k (0 to 6) takes bit `6 - k`** (`0x40 >> k`). Unpack each
+  309-byte chunk on its own (37 groups, 259 bytes) and join them.
+  - Found by setting 0.5 then 1.0 (`3f800000`, one extra top bit) on 6 parameters x 4
+    presets: each time exactly one top-byte bit flipped, in the value's own group, and
+    it was bit 6 - k for k = 0, 1, 3, 4 and 5.
+  - Checked: every record header then has no stray 0x80s, every set value reads back,
+    and `drive_min.txt` / `drive_max.txt` read exactly 0.0 / 1.0.
+  - The same rule is already in the live-report and set-value code (section 7): in a
+    5-byte value the first byte is the top byte, and the 0x80 of value byte 1 is its
+    bit 5 (`0x20` in `decode_value`), or bit 6 (`0x40`) for value byte 0 in
+    `encode_set_value`.
+  - The earlier attempts failed because they assumed 0.5 is stored as `00 00 00 3f`.
+    It isn't (next point).
+- **A value is a 4-byte little-endian float**, after a 6-byte record header that starts
+  with a record id. **The amp fills in the low bytes:** 0.5 is stored as `00 80 00 3f`
+  (0.502), 0.75 as 0.752 and 1.0 as 1.0039. A set only carries the top 16 bits of the
+  float (section 8), and the amp sets the next bit (half a step, about 0.002). Compare a
+  dump to a sent value with a tolerance of about 0.005. The record **moves** between
+  presets (by up to about 20 bytes), so a fixed offset doesn't work. **Record ids repeat**,
+  though: every dump has `1f 00 00 00 03 00` 3 or 4 times (near 690-720, 1170-1190 and
+  1265-1285, plus 1028 on Chime) and `33 …` up to twice. They are probably numbered per
+  block (amp, effects, reverb), so a value has to be found by block and then id. The
+  block layout isn't known yet.
+
+  | Parameter (wire id) | Record id | Header seen | Offsets (presets 4 / 8 / 0 / 14) |
+  |---|---|---|---|
+  | Drive (2A:25:0) | 0x1F | `1f 00 00 00 03 00` | 1028 / - / - / - |
+  | Drive (alt) (2A:26:0) | 0x33? | `33 00 00 00 03 00` on preset 14; `00 03 00 00 00 00` on 8 and 0 (not understood) | - / 1037 / 1038 / 1020 |
+  | Volume (74:24:3) | 0x3C | `3c 03 00 00 03 00` | 460 / 456 / 447 / 462 |
+  | Reverb (74:20:3) | 0x32 | `32 03 00 00 03 00` | 360 / 356 / 347 / 362 |
+  | FX Knob (FX1) (74:1A:3) | 0x26 | `26 03 00 00 03 00` | 237 / 233 / 224 / 239 |
+  | FX1 (74:48:3) | 0x28 | `28 03 00 00 01 00` on preset 0; others unclear | 260 / ? / 244 / 262 |
+  | Reverb (mix) (1F:7A:1) | - | - | nothing changed on any preset |
+
+  "-" = the set changed nothing. Every value in the table reads back as set (MSB-first
+  unpacking, both runs), at exactly one offset, except FX1 on preset 8: one byte changed
+  there, but no float reads 0.5 then 0.75. FX1's header type byte is 01 instead of 03, so
+  it may be an on/off value rather than a 0-to-1 float.
+- Values found before any set, for the record (MSB-first): Drive on Chime 0.433 (the
+  live report said 0.4316); Volume 0.592 / 0.240 / 0.702 / 0.700 and Reverb 0.204 /
+  0.292 / 0.501 / 0.478 on presets 4 / 8 / 0 / 14; FX Knob (FX1) 1.0 and FX1 0.0 on all four.
+- **Drive or Drive (alt) depends on the preset** (**confirmed** on 4 presets): Chime
+  (preset 4) only responds to 0x25; Jungle $lash, Bass and Ambient 1 only respond to
+  0x26. Probably it depends on the amp model. So "drive" has to send the one the current
+  preset uses (or both).
 - The amp's preset **type** (amp model, effect models) has not been located yet.
   Expect numeric ids from the `.models` files (section 10).
 - A dump is not always returned. In the four Chime captures of 2026-11-03 it arrived in
@@ -97,8 +154,8 @@ What is known about the payload:
 | (45, 0x07, 0x03)              | msg[26] == 0x7F          | status: arrives about 2 s after each preset change ("preset loaded"?) | inferred |
 | (45, 0x07, 0x03)              | anything else            | preset knob changed; position = (msg[26] - 8) % 16 (see section 11). Called "heartbeat" in older notes | confirmed |
 | (37, 0x0F, 0x05)              |                          | tap tempo                  | confirmed |
-| 50 to 99 bytes, msg[13] == 1  |                          | preset info (name)         | confirmed |
-| (29, 0x0B, 0x01)              |                          | sync-like message with a counter; follows each status message | ignore |
+| 45 to 77 bytes, msg[13] == 1  | `msg[7]` == 1            | preset-list entry (name), in reply to a preset-list request | confirmed |
+| (29, 0x0B, 0x01)              | `msg[7]` == 0            | the amp's answer to a set (section 8); also seen around status messages | ignore |
 | 309 bytes, msg[13] == 1       |                          | dump chunk, **not** preset info | section 3 |
 
 ### Parameter report (45 bytes)
@@ -128,19 +185,71 @@ BPM = `decode_value(msg[26:31]) * 2` (confirmed by user tests).
 Pressing the Save button gives shape `(45, 7, 3)` with `msg[35] == 1` and
 `msg[26] != 0x7F` (confirmed).
 
-### Preset info
+### Preset list (decoded 2026-11-06 from `captures/handshake_replies.txt`)
 
-- Name = printable ASCII of `msg[49:-1]`. Names are 7-bit packed, so every 8th byte is
-  a 00 and is dropped by the printable filter.
-- The handshake returns the whole list of names (factory presets plus `User 1` to
-  `User 4`).
+The handshake asks for every preset's name with two kinds of request. Both are
+29 bytes, channel 1, with the preset index at `msg[22]`:
+
+`f000010c22054d01 <ctr> 00 00 0b 00 <kind> 00 00 00 04 00 00 00 00 <index> 00 00 00 00 00 f7`
+
+| Kind (`msg[13]`) | Indexes asked | Reply layout | What it lists |
+|------------------|---------------|--------------|---------------|
+| `0x06` | 0 to 127, except 4 (127 requests) | short | all 128 preset slots, ending with `User 1` to `User 4` at 124 to 127 |
+| `0x0E` | 0 to 114 (115 requests) | long | indexes 0 to 114 only |
+
+**Decoding a reply (confirmed: all 240 entries in the capture fit one of the two layouts).**
+
+1. Unpack the 7-bit payload. From `msg[12]` up to the `F7`, take groups of 8 bytes. The
+   first byte of a group holds the top bits of the next 7, most significant first: data
+   byte k (0 to 6) takes bit `6 - k` (`0x40 >> k`). Output the 7 bytes, adding `0x80`
+   where the bit is set. This is the same packing as the dump, where it is confirmed
+   (section 3). The "skip every 8th byte" rule there is this with the top bits ignored.
+   (Until 2026-11-06 this said bit k → byte k. That gives the same names, because
+   preset-list entries have no top bits set in the bytes that matter, so both rules fit
+   all 240 entries.)
+2. In the unpacked bytes `u`:
+
+   | Layout | Length byte | Name starts | Check | Raw message offsets |
+   |--------|-------------|-------------|-------|---------------------|
+   | short | `u[12]` = name length + 1 | `u[16]` | `u[4] == u[12] + 8` | length `msg[26]`, name from `msg[31]` |
+   | long  | `u[28]` = name length + 1 | `u[32]` | `u[4] == u[28] + 24` | length `msg[45]`, name from `msg[49]` |
+
+   The name is plain ASCII with zero padding after it. In the long layout, `u[12:15]` and
+   `u[20:26]` hold 9 more bytes per preset (an id or checksum?). **Unknown.** `u[0]` is
+   always 1.
+3. A name of 12 characters or fewer gives a **45-byte** message; longer names give 53,
+   61, 69 or 77 bytes.
+
+**Matching replies to indexes: by handshake line.** The reply's counter (`msg[8]`) only
+matches the request's counter when the amp's counters are in step with the recording.
+In 3 of 4 captures they were not, so counter matching gave wrong names. The reply
+arrives within about 4 ms (section 1), so the replies read after sending line *n* belong
+to line *n*'s request. Flattening all the handshake replies into one list loses this.
+
+**What the lists hold (from the one clean capture):**
+
+- The two lists agree on all 112 indexes they share.
+- 0 to 20 match the preset-select table (section 8): **list index = select value**
+  (inferred for 21 and up).
+- The short list had no reply for 0 and 34 (34 was also missing in `chime_B0.txt`), and 4
+  is never asked for. The long list covers all three (Bass, Chime 1: Class-A, Mood), so
+  **merge the two lists** to get every name.
+- 115 to 123 in the short list: DirtyAcoBlues, Fluff Clean, Fluff Big Chug, Clean Your
+  Room, Dirt Street, Dub-ya Push, Sugar Skull, Low Rez Fred, Plateau of Leng. These are
+  not in the long list. Why the long list stops at 114 is **unknown**.
+- Old `classify` (50 to 99 bytes, printable bytes of `msg[49:-1]`) read the long layout
+  correctly only by chance, missed every name of 12 characters or fewer, and turned
+  short-layout names into fragments such as `orus` and ` Hole`.
+
+**Other notes:**
+
 - Older notes said the amp announces the current preset about every 5 seconds. That was
   seen while the Tone/Reverb jitter stream was running (section 7). With a quiet amp
-  (2026-11-03, knobs at minimum) a preset-knob click sent **no** preset-info message,
-  only the preset-change event and the status message. So announcements seem to follow
-  parameter activity, not preset changes (**inferred**).
-- `msg[40]` is a "fingerprint" byte per preset. It is not unique and not an
-  "edited" flag. **Unknown.**
+  (2026-11-03, knobs at minimum) a preset-knob click sent **no** preset-list entry,
+  only the preset-change event and the status message. So the entries seen outside
+  the handshake seem to follow parameter activity, not preset changes (**inferred**).
+- `msg[40]` (old "fingerprint" byte) is inside the packed payload, so it is not a field
+  by itself.
 - The amp never reports the knob position, only the preset name.
 
 ## 5. Parameter blocks and ids
@@ -256,18 +365,35 @@ Test vectors (app captures; the decoder maps these to the value shown):
      msg[26:31]. (Older notes said msg[15]; that was wrong.)
    - msg[20] (`<unk>`) takes values 1 to 3 in the app's captures. **Unknown.** The Pi
      code sends 1, which works for Drive.
-   - `SEQ` starts at 0x0C and steps by 2.
+   - `SEQ` starts at 0x0C and steps by 2. The amp doesn't seem to check it
+     (**confirmed** for Drive, 2026-11-06, `captures/seq_check.txt`): sets numbered
+     0x0C, 0x09 and 0x0B all worked while the amp's own counter was at 0x08 to 0x0D.
 
 ### Status of sets
 
 | Set | Result |
 |-----|--------|
-| Drive/Gain (0x2A, 0x25 / 0x26, sub 0) | **confirmed** by ear, and by the amp's report and dump |
-| Volume (0x74, 0x24, sub 3) | probably works (reported 0 at the next connect) |
-| Reverb (panel 74:20:3 and block 1F:7A:1) | no visible effect. **Unconfirmed** |
+| Drive/Gain (0x2A, 0x25 / 0x26, sub 0) | **confirmed** by ear (again 2026-11-06) and by the dump. No report comes back (below) |
+| Drive (alt) (0x2A, 0x26, sub 0) | **confirmed** by the dump: the drive for presets 8, 0 and 14, where 0x25 does nothing (section 3) |
+| Volume (0x74, 0x24, sub 3) | **confirmed** by the dump on 4 presets (section 3) |
+| Reverb (panel 74:20:3) | **confirmed** by the dump on 4 presets (section 3) |
+| Reverb (block 1F:7A:1) | changes nothing in the dump on 4 presets. **Probably not a settable parameter** |
+| FX1 (74:48:3), FX Knob (FX1) (74:1A:3) | **confirmed** by the dump on 4 presets (section 3) |
 | Sub values other than 0 and 3 | unconfirmed (no capture of the app doing it) |
 
-Whether a set appears in the live stream (section 7) still needs a test.
+### What the amp sends back after a set (confirmed, 2026-11-06)
+
+**A set is not reported back.** The new value never shows up as a parameter report
+(section 7): three Drive sets, all heard, gave no report at all
+(`captures/seq_check.txt`). What the amp does send, every time:
+
+1. at once, a 29-byte channel-0 message `(29, 0x0B, 0x01)` with the amp's next
+   counter, for example `f000010c22054d000900000b00010000000400000000000000000000f7`
+2. about 2 s later, a status message (45 bytes, `msg[11]` 0x07, `msg[13]` 0x03,
+   `msg[26]` 0x7F), as after a preset-knob click
+
+Neither message carries the value. To know a set's value, the Pi has to remember what
+it sent, or read it from a dump (section 3).
 
 ### Preset select
 
@@ -277,6 +403,12 @@ followed by the dump request (section 2), then further messages.
 
 Values seen: `08` loaded "Jungle $lash" and `04` loaded "Chime 1: Class-A", so the value is
 probably an index into the amp's preset list.
+
+**The value is the preset-list index (confirmed 2026-11-06, `captures/check_amp_2.txt`):**
+21, 60, 114, 124 and 127 each loaded the name the preset list (section 4) gives for that
+index ("Angel P-Ball", "The Trooper", "AmbientAco", "User 1", "User 4"). **115 timed out**
+(no dump within 4 s). 115 to 123 are the names only the short list has, so they may not be
+loadable presets. Not retried yet.
 
 **Sent from the Pi (2026-11-03, `tools/preset_select.py`, `captures/preset_select_2.txt`):**
 preset select works (**confirmed**). The dump request right after it returns the newly
@@ -296,9 +428,10 @@ loaded preset. Values and names read from those dumps:
 | 16 | Brit Plexi 45 | 20 | 90s SLO |
 | 17 | Brit J-800 | | |
 
-This is the order of the handshake's preset list, and 4 and 8 match the app captures.
-The list continues past 15, so the amp has more presets than the knob's 16 positions;
-how far it goes (the handshake list has well over 100 names) has not been tried.
+This is the order of the handshake's preset list (section 4, "Preset list"), and 4 and 8
+match the app captures. The list has 128 entries (0 to 127), so the amp has far more
+presets than the knob's 16 positions. Selecting values above 20 has not been tried; the
+list says 124 to 127 should be `User 1` to `User 4`.
 Which value each knob position loads: see section 11.
 A select sends no preset-change event; only the (29, 11, 1) message and the status
 message came back besides the dump.
@@ -372,6 +505,11 @@ These are the app's own files, used here only as reference. **Do not commit them
   is one step from the previous position. If none is, use the last value.
   Checked against the 16 clicks in `preset_clicks.txt` only.
 - The amp does not send the preset name on a click (section 4).
+- **Numbering against the knob's markings (one data point, 2026-11-06,
+  `captures/check_amp_2.txt`):** the knob's own marking 2 came out as position 2, with
+  "Insane 1: Lunatic" loaded. The markings run 1 to 16, so the numbers may match up
+  directly, with marking 16 coming out as 0 (from the `% 16`). Check at markings 1 and 16.
+  At the start of that run the knob was at marking 1 with "Chunk 2: Phat Chunk".
 
 ### Old position → name table (2026-10-30)
 
@@ -392,6 +530,16 @@ table** before relying on it.
 
 ## 12. Open questions
 
+Answered on 2026-11-06: a dump after a set holds the new value (section 3); select
+values 21 to 127 load the preset-list entry with the same index, except 115, which
+timed out (section 8); panel-block sets (Volume, Reverb, FX) work (section 8); a set
+does not show up in the live stream (section 8).
+
+- The status message about 2 s after a set: does a knob-click handler mistake it for
+  the end of a click? (It only settles when knob positions came first, so probably not.)
+- Can presets 115 to 123 be selected at all? (115 timed out once.)
+- The dump's block layout: how to tell which `0x1F` / `0x33` record is the amp's Drive,
+  and so which Drive id the current preset uses (section 3).
 - The position → preset name table, re-recorded with the bounce rule (section 11).
 - The cause of the wedge, and a reliable way to get the dump every time.
 - Where the amp model and effect models are stored in the dump, and the layout of the
@@ -399,11 +547,11 @@ table** before relying on it.
 - Whether the wire id always follows the symbol name (section 5).
 - The Tone ids: which of 0x24 and 0x27 is Treble and which is Presence.
 - (2A,02), and what the status message means exactly.
-- Preset fingerprint byte (msg[40]) and msg[20] in set messages.
-- Preset-select value mapping, and the Save command.
-- Whether sets in the panel block (Volume, Reverb, FX) work, and sets with sub other
-  than 0 and 3.
-- Whether a set shows up in the live stream.
+- msg[20] in set messages.
+- The Save command.
+- Why the long preset list stops at 114, why the short list has no reply for 0 and 34,
+  and the 9 extra bytes in long-layout entries.
+- Sets with sub other than 0 and 3, and FX2 / FX3 and their FX knobs (not tried).
 
 ## 13. Hardware notes
 

@@ -1,11 +1,9 @@
 import unittest
 from dataclasses import FrozenInstanceError
 
+from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
 from spiderweb.service import (
-    AmpDisconnected,
-    AmpError,
     AmpState,
-    AmpTimeout,
     ConnectionState,
     Event,
     EventType,

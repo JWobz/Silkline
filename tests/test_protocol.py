@@ -68,7 +68,13 @@ class TestProtocol(unittest.TestCase):
             "0000001f780554687c0400000013000000437275006e636820323a2000506173"
             "6164656e0061000000000000f7"
         )
-        self.assertEqual(classify(msg), (MessageKind.PRESET_INFO, "Crunch 2: Pasadena", 0x7c))
+        self.assertEqual(classify(msg), (MessageKind.PRESET_INFO, "Crunch 2: Pasadena"))
+
+    def test_short_preset_info_message(self):
+        # Names of 12 characters or fewer come in 45-byte messages, in the short layout (protocol.md section 4).
+        msg = bytes.fromhex(
+            "f000010c22054d01040001080001000000110000000000000000090000000041636f75730074696300000000f7")
+        self.assertEqual(classify(msg), (MessageKind.PRESET_INFO, "Acoustic"))
 
     def test_dump_chunk_is_not_preset_info(self):
         msg = bytearray(309)     # 309 zero bytes

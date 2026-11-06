@@ -2,6 +2,7 @@ import os
 import select
 import time
 
+from spiderweb.errors import AmpNotFound
 from spiderweb.logger import Logger
 
 SPIDER_KEYWORD = "spider"
@@ -35,6 +36,23 @@ class AmpTransport:
                     [], [self.fd], [], 0.05
                 )  # wait until the device can take more
 
+    def read(self, timeout):
+        """Reads messages until timeout"""
+        msgs = []
+        r, _, _ = select.select([self.fd], [], [], timeout)
+        if r:
+            try:
+                chunk = os.read(self.fd, 4096)
+            except BlockingIOError:
+                return []
+            if chunk:
+                self.buf += chunk
+        while 0xF7 in self.buf:
+            i = self.buf.index(0xF7)
+            msgs.append(bytes(self.buf[: i + 1]))
+            del self.buf[: i + 1]
+        return msgs 
+
     def read_messages(self, quiet=0.05, limit=1.0):
         """Reads messages from the amp until a quiet period of `quiet` seconds is observed or a total of `limit` seconds has passed. Returns a list of complete messages received."""
         msgs, end, last = [], time.time() + limit, time.time()
@@ -60,16 +78,16 @@ class AmpTransport:
             os.close(self.fd)
             self.fd = None
 
-    def find_amp_port():
-        """Finds the amp's raw MIDI device by looking for it in the ALSA card list."""
-        card = None
-        with open("/proc/asound/cards") as f:
-            for line in f:
-                first = line.split()[0] if line.split() else ""
-                if first.isdigit():
-                    card = first  # a card's first line: remember its number
-                if SPIDER_KEYWORD in line.lower() and card is not None:
-                    return f"/dev/snd/midiC{card}D0"
-        raise RuntimeError(
-            "Could not find amp port. Please check that the amp is connected and powered on."
-        )
+def find_device():
+    """Finds the amp's raw MIDI device by looking for it in the ALSA card list."""
+    card = None
+    with open("/proc/asound/cards") as f:
+        for line in f:
+            first = line.split()[0] if line.split() else ""
+            if first.isdigit():
+                card = first  # a card's first line: remember its number
+            if SPIDER_KEYWORD in line.lower() and card is not None:
+                return f"/dev/snd/midiC{card}D0"
+    raise AmpNotFound(
+        "Could not find amp port. Please check that the amp is connected and powered on."
+    )

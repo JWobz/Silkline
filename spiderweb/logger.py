@@ -1,3 +1,11 @@
+"""
+ logger.py
+
+A helper logger, responsible for printing to the console
+
+"""
+
+
 import time
 
 

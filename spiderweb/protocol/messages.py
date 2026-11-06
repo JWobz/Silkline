@@ -1,11 +1,14 @@
 from enum import Enum
 
+from spiderweb.protocol.presets import entry_name
+
 from .knob import POSITIONS
 from .values import decode_value
 
 BEGIN_LENGTH = 29
 SET_VALUE_LENGTH = 37
 
+FIRST_SEQUENCE = 0x0C
 HEADER = bytes.fromhex("f000010c22054d")
 BYTE_HEADER = HEADER + bytes([0x00])
 
@@ -51,10 +54,10 @@ def classify(msg):
             else:
                 return (MessageKind.PRESET_CHANGE, (msg[26] - 8) % POSITIONS)
 
-    # Preset info messages
-    if 49 < length < 100 and msg[13] == 1:
-        name = bytes(b for b in msg[49:-1] if 32 <= b < 127).decode()
-        return (MessageKind.PRESET_INFO, name, msg[40])
+    # Preset-list entries from the handshake (protocol.md section 4, "Preset list")
+    name = entry_name(msg)
+    if name is not None:
+        return (MessageKind.PRESET_INFO, name)
 
     # Default fallback if nothing matches
     return (MessageKind.UNKNOWN, shape)

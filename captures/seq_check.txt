@@ -1,0 +1,23 @@
+20:36:22 connecting (about 15 s)...
+20:36:36 handshake: 261 replies; last channel-0 counters ['0x3', '0x4', '0x5', '0x6', '0x7', '0x8']; a fresh session ends at 0x0b
+20:36:47 sent Drive 0.2: begin seq 0x0c, set seq 0x0d
+20:36:47 raw  29 ch0 #0x09 unknown       f000010c22054d000900000b00010000000400000000000000000000f7
+20:36:47   amp sent 29 bytes, ch0 #0x09, unknown
+20:36:49 RESULT 1 fixed: no Drive report within 2.0s
+20:36:49 raw  45 ch0 #0x0a status        f000010c22054d000a00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:36:49   amp sent 45 bytes, ch0 #0x0a, status
+20:37:02 RESULT 1 fixed by ear: 'y'
+20:37:13 sent Drive 0.8: begin seq 0x09, set seq 0x0a
+20:37:13 raw  29 ch0 #0x0b unknown       f000010c22054d000b00000b00010000000400000000000000000000f7
+20:37:13   amp sent 29 bytes, ch0 #0x0b, unknown
+20:37:15 RESULT 2 follow: no Drive report within 2.0s
+20:37:15 raw  45 ch0 #0x0c status        f000010c22054d000c00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:37:15   amp sent 45 bytes, ch0 #0x0c, status
+20:37:19 RESULT 2 follow by ear: 'y'
+20:37:31 sent Drive 0.4: begin seq 0x0b, set seq 0x0c
+20:37:31 raw  29 ch0 #0x0d unknown       f000010c22054d000d00000b00010000000400000000000000000000f7
+20:37:31   amp sent 29 bytes, ch0 #0x0d, unknown
+20:37:33 RESULT 3 next: no Drive report within 2.0s
+20:37:33 raw  45 ch0 #0x0e status        f000010c22054d000e00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+20:37:33   amp sent 45 bytes, ch0 #0x0e, status
+20:37:38 RESULT 3 next by ear: 'y'

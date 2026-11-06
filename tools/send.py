@@ -1,8 +1,18 @@
-import sys
-import spiderweb.protocol as protocol
+"""Set one parameter and show what the amp says back.
 
-from spiderweb.amp import Amp
+Usage (from the project root):
+    python3 -m tools.send drive 0.5
+"""
+import sys
+import time
+
+import spiderweb.protocol as protocol
+from spiderweb.amp import Amp, load_handshake
+from spiderweb.connection import Connection
 from spiderweb.logger import Logger
+
+LISTEN = 1.0          # seconds to show replies after the set
+
 
 def main():
     logger = Logger(prefix="send")
@@ -17,15 +27,16 @@ def main():
         print(f"Unknown parameter: {param}")
         sys.exit(1)
 
-    amp = Amp()
+    amp = Amp(Connection(load_handshake()))
+    amp.add_listener(lambda message: logger.info(f"Reply: {protocol.classify(message)}"))
     try:
-        amp.handshake()
+        amp.connect()
         logger.success("Connected to amp successfully.")
-        replies = amp.set_parameter(found_parameter, value)
-        for message in replies:
-            logger.info(f"Reply: {protocol.classify(message)}")
+        amp.set_parameter(found_parameter, value)
+        time.sleep(LISTEN)        # replies arrive through the listener
     finally:
         amp.close()
+
 
 if __name__ == "__main__":
     main()

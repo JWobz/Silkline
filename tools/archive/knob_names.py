@@ -15,7 +15,7 @@ from pathlib import Path
 
 import spiderweb.protocol as protocol
 from spiderweb.amp import Amp
-from spiderweb.protocol import DUMP_REQUEST, dump_complete, name_from_dump, settle_position
+from spiderweb.protocol import DUMP_REQUEST, settle_position
 from tools.preset_select import read_dump
 
 
@@ -49,9 +49,9 @@ def main():
                         position, candidates = settle_position(candidates, position), []
 
                         amp.transport.send(DUMP_REQUEST)
-                        chunks, _ = read_dump(amp)
-                        name = name_from_dump(chunks[0]) if chunks else None
-                        if not dump_complete(chunks):
+                        dump, _ = read_dump(amp)
+                        name = dump.name()
+                        if not dump.complete():
                             name = f"{name!r} (dump incomplete)" if name else "(no dump)"
 
                         raw = (position + 8) % 16
