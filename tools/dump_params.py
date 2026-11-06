@@ -20,6 +20,10 @@ Everything goes to captures/dump_params.txt (a new file each run): every dump as
 the bytes each set changed, and a summary. Only the edit buffer changes; nothing is
 saved on the amp. Turn the preset knob afterwards to reload a clean preset.
 
+Other parameters: name them after the command, by name or as block:id:sub in hex
+(for ones not in parameters.py), for example
+    python3 -m tools.dump_params fx2 fx3 "fx knob (fx2)" 2a:27:0
+
 Bits mode, to work out the 7-bit packing (protocol.md section 3):
     python3 -m tools.dump_params bits
 sets 0.5 then 1.0 instead. 1.0 is 3f800000, so only one top bit should change between
@@ -35,7 +39,7 @@ from spiderweb.amp import Amp, load_handshake
 from spiderweb.connection import Connection
 from spiderweb.errors import AmpError
 from spiderweb.protocol.dump import DUMP_CHUNK_LENGTH
-from spiderweb.protocol.parameters import BY_NAME
+from spiderweb.protocol.parameters import BY_NAME, Parameter
 
 
 def unpack(msg):
@@ -49,7 +53,22 @@ def unpack(msg):
     return bytes(out)
 
 PRESETS = (4, 8, 0, 14)          # Chime 1: Class-A, Jungle $lash, Bass, Ambient 1: Black Hole
-PARAMS = ("drive", "drive (alt)", "volume", "reverb", "reverb (mix)", "fx1", "fx knob (fx1)")
+DEFAULT_PARAMS = ("drive", "drive (alt)", "volume", "reverb", "reverb (mix)", "fx1", "fx knob (fx1)")
+
+
+def parameter(spec):
+    """ A Parameter from a name in parameters.py, or from "block:id:sub" in hex (e.g. 2a:27:0). """
+    if spec.lower() in BY_NAME:
+        return BY_NAME[spec.lower()]
+    parts = spec.split(":")
+    if len(parts) == 3:
+        block, param_id, sub = (int(p, 16) for p in parts)
+        return Parameter(spec.upper(), block, sub, param_id, settable=True)
+    raise SystemExit(f"unknown parameter {spec!r}: use a name from parameters.py or block:id:sub")
+
+
+ARGS = [a for a in sys.argv[1:] if a != "bits"]
+PARAMS = [parameter(a) for a in (ARGS or DEFAULT_PARAMS)]
 BITS = "bits" in sys.argv[1:]
 LOW, HIGH = (0.5, 1.0) if BITS else (0.5, 0.75)
 TOLERANCE = 0.005
@@ -140,8 +159,8 @@ class DumpParams:
         self.log_dump(label, dump)
         return dump
 
-    def check_param(self, preset, name, noise):
-        param = BY_NAME[name]
+    def check_param(self, preset, param, noise):
+        name = param.name.lower()        # the label used in the log
         self.amp.set_parameter(param, LOW)
         time.sleep(SETTLE)
         low_dump = self.take_dump(f"{preset} {name} {LOW}")
@@ -172,11 +191,11 @@ class DumpParams:
         first = dump_data(dump)
         noise = changed(first, dump_data(self.take_dump(f"{value} again")))
         self.write(f"  changed by themselves between two dumps: {ranges(noise)}")
-        for name in PARAMS:
+        for param in PARAMS:
             try:
-                self.check_param(value, name, noise)
+                self.check_param(value, param, noise)
             except AmpError as e:
-                self.write(f"  {name}: {type(e).__name__}: {e}")
+                self.write(f"  {param.name}: {type(e).__name__}: {e}")
 
     def run(self):
         print(__doc__)

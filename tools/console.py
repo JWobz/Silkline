@@ -155,8 +155,8 @@ class AmpConsole:
         except ValueError:
             self.logger.error("Value must be a number between 0 and 1.")
             return
-        self.amp.set_parameter(param, value)     # the amp's report shows up as a normal message
-        self.logger.info(f"Sent {param.name} = {value:.3f}")
+        self.amp.set_parameter(param, value)     # waits for the amp's answer (protocol.md section 8)
+        self.logger.info(f"Set {param.name} = {value:.3f} (the amp answered)")
 
     def cmd_get(self, args):
         """ get <param> : show the last value seen for a parameter """

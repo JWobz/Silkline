@@ -8,7 +8,8 @@ log, protocol.md section 7). It uses one connection for every check and walks
 you through them; press Enter to start each one, or type s and Enter to skip it.
 
   1. connect      the preset name read from the handshake's dump
-  2. set          Drive to 0.2 then 0.8: does the amp answer, and can you hear it?
+  2. set          Drive (both ids) to 0.2 then 0.8: does each set get answered and
+                  recorded, and can you hear it?
   3. select       presets 4 and 8, timed
   4. presets      select values above 20: is the list index the select value?
   5. knob         click the preset knob once: position and the refreshed name
@@ -25,19 +26,13 @@ from pathlib import Path
 from spiderweb.amp import Amp, load_handshake
 from spiderweb.connection import Connection
 from spiderweb.errors import AmpError
-from spiderweb.protocol.messages import HEADER, MessageKind, classify
+from spiderweb.protocol.messages import MessageKind, classify
 from spiderweb.service import AmpService, ConnectionState, EventType
 
 DRIVE_KEYS = {(0x2A, 0x25, 0), (0x2A, 0x26, 0)}    # Drive and Drive (alt)
-WAIT_REPORT = 2.0      # seconds to wait for the amp to report a set
 WAIT_KNOB = 30.0       # seconds to wait for a knob click
 WAIT_UNPLUG = 30.0     # seconds to wait for the unplug to be noticed
 HIGH_VALUES = (21, 60, 114, 115, 124, 127)   # past the 0-20 tried so far; 115-127 only in the short list
-
-
-def is_set_answer(msg):
-    """ The 29-byte channel-0 message the amp sends straight after each set (protocol.md section 8). """
-    return len(msg) == 29 and msg[:7] == HEADER and msg[7] == 0 and msg[11] == 0x0B and msg[13] == 0x01
 
 
 def output_path():
@@ -57,7 +52,6 @@ class Checker:
         self.log_lock = threading.Lock()
         self.events = []
         self.drive_reports = []
-        self.set_answers = []
         self.arrived = threading.Condition()
         self.results = []
         self.service = AmpService(amp_factory=self.make_amp)
@@ -80,23 +74,13 @@ class Checker:
         return amp
 
     def on_raw(self, msg):
-        """ Logs every raw message, and keeps every Drive report and set answer (protocol.md section 8). """
+        """ Logs every raw message, and keeps every Drive report (even ones too small to be an event). """
         self.write(f"raw {len(msg):3} {msg.hex()}", show=False)
-        if is_set_answer(msg):
-            with self.arrived:
-                self.set_answers.append(time.time())
-                self.arrived.notify_all()
         result = classify(msg)
         if result[0] == MessageKind.PARAM and result[1] in DRIVE_KEYS:
             with self.arrived:
                 self.drive_reports.append((time.time(), result[1], result[2]))
                 self.arrived.notify_all()
-
-    def wait_for_set_answer(self, timeout, since):
-        """ Seconds from `since` to the amp's answer to a set, or None after `timeout` seconds. """
-        with self.arrived:
-            self.arrived.wait_for(lambda: any(t >= since for t in self.set_answers), timeout)
-            return next((t - since for t in self.set_answers if t >= since), None)
 
     def wait_for_drive_report(self, timeout, since):
         """ The first raw Drive report after `since`, as (key, value), or None after `timeout` seconds. """
@@ -158,19 +142,22 @@ class Checker:
         if not self.go("2. set", "Plays Drive at 0.2, then 0.8. Strum while it runs and listen for the change."):
             return
         for value in (0.2, 0.8):
-            since = time.time()
-            self.service.set("drive", value)
-            took = self.wait_for_set_answer(WAIT_REPORT, since)
-            if took is None:
-                self.result(f"set {value}", "FAIL", f"no answer from the amp within {WAIT_REPORT}s")
-            else:
-                self.result(f"set {value}", "PASS", f"the amp answered after {took:.2f}s")
-            # The amp doesn't report a set back (protocol.md section 8), so a report here
-            # would be news, and what get() shows depends on the service's design.
+            # Both Drive ids: each preset uses one, and the other is harmless (protocol.md
+            # section 8). set() waits for the amp's answer, so this also checks the pacing.
+            for name in ("drive", "drive (alt)"):
+                since = time.time()
+                try:
+                    self.service.set(name, value)
+                except AmpError as e:
+                    self.result(f"set {name} {value}", "FAIL", f"{type(e).__name__}: {e}")
+                    continue
+                self.result(f"set {name} {value}", "PASS", f"answered after {time.time() - since:.2f}s")
+                got = self.service.get(name)
+                self.result(f"get {name} {value}", "PASS" if got == value else "FAIL", f"service.get = {got}")
+            # The amp doesn't report a set back (protocol.md section 8), so a report would be news.
             report = self.wait_for_drive_report(1.0, since)
             if report is not None:
                 self.result(f"report {value}", "INFO", f"the amp did report {report[1]:.3f} for {report[0]}")
-            self.result(f"get after set {value}", "INFO", f"service.get('drive') = {self.service.get('drive')}")
             time.sleep(2.0)
         answer = self.ask("Did you hear the drive change both times? (y/n)")
         self.result("set by ear", "PASS" if answer == "y" else "FAIL", f"you said {answer!r}")

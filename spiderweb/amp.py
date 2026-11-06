@@ -13,6 +13,7 @@ from spiderweb.protocol.dump import DumpCollector
 from spiderweb.protocol.messages import (
     DUMP_REQUEST,
     FIRST_SEQUENCE,
+    SetAnswer,
     build_begin_message,
     build_set_message,
     select_message,
@@ -21,6 +22,7 @@ from spiderweb.protocol.values import encode_set_value
 
 HANDSHAKE_PATH = Path(__file__).parent / "handshake.txt"
 
+SET_TIMEOUT = 1.0
 DUMP_TIMEOUT = 4.0  # seconds to wait for a dump
 
 def load_handshake(path=HANDSHAKE_PATH):
@@ -44,6 +46,8 @@ class Amp:
     Amp only builds messages and hands them to a Connection; the connection
     does the reading. Replies that aren't part of a request (parameter
     reports, knob moves, taps) go to the listeners added with add_listener().
+    Sets, selects and dumps wait for the amp, so call them from your own
+    thread, not from a listener.
     """
     def __init__(self, connection:Connection):
         self._logger = Logger(prefix="Amp")
@@ -75,15 +79,19 @@ class Amp:
     def set_raw(self, block, sub, param_id, raw5, unknown=1):
         """Sets a parameter to a raw five-byte value (protocol.md section 8).
 
-        Sends a begin message and then a set message, numbered seq and seq + 1.
-        The lock keeps each pair together when two threads set at once.
-        Doesn't wait for a reply: the amp's report of the new value arrives
-        through the listeners. Raises AmpDisconnected if not connected.
-        """
+        Sends a begin message and then a set message, numbered seq and seq + 1,
+        and waits for the amp's answer (the value itself is never reported back).
+        A set sent before the previous one is answered makes the amp ignore all
+        later sets, so the lock keeps one set at a time, from any thread.
+        Blocks until answered, so don't call it from a listener (AmpError).
+        Raises AmpTimeout if there is no answer within SET_TIMEOUT (sets are then
+        probably dead until a new handshake), AmpDisconnected if not connected.
+        """    
         with self._set_lock:
-            self._connection.send(build_begin_message(self._seq))
-            self._connection.send(build_set_message(self._seq+1, block, sub, param_id, raw5, unknown))
+            msgs = [build_begin_message(self._seq),
+                    build_set_message(self._seq+1, block, sub, param_id, raw5, unknown)]
             self._seq = (self._seq + 2) % 128   
+            self._connection.request(msgs, SetAnswer(), SET_TIMEOUT)
     
     def select_preset(self, value, timeout=DUMP_TIMEOUT):
         """Loads preset `value` (an index into the amp's preset list) and returns its dump.
@@ -100,8 +108,8 @@ class Amp:
     def set_parameter(self, param, value):
         """Sets a Parameter (from protocol.parameters) to a value from 0 to 1.
 
-        Raises ValueError, and sends nothing, if the parameter can't be set
-        or the value is out of range.
+        Returns once the amp has answered (see set_raw). Raises ValueError, and
+        sends nothing, if the parameter can't be set or the value is out of range.
         """
         if not param.settable:
             raise ValueError(f"Parameter {param.name} is not settable.")

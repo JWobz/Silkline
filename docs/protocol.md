@@ -126,7 +126,19 @@ knobs are left alone.
   | Reverb (74:20:3) | 0x32 | `32 03 00 00 03 00` | 360 / 356 / 347 / 362 |
   | FX Knob (FX1) (74:1A:3) | 0x26 | `26 03 00 00 03 00` | 237 / 233 / 224 / 239 |
   | FX1 (74:48:3) | 0x28 | `28 03 00 00 01 00` on preset 0; others unclear | 260 / ? / 244 / 262 |
+  | FX Knob (FX2) (74:1C:3) | 0x2A | `2a 03 00 00 03 00` | 280 / 276 / 267 / 282 |
+  | FX2 (74:47:3) | 0x2C | `2c 03 00 00 01 00` | 300 / 296 / 287 / 302 |
+  | FX Knob (FX3) (74:1E:3) | 0x2E | `2e 03 00 00 03 00` | 320 / 316 / 307 / 322 |
+  | FX3 (74:46:3) | 0x30 | `30 03 00 00 01 00` | 340 / 336 / 327 / 342 |
+  | Tone (part) (2A:24:0) | 0x1E | `1e 00 00 00 03 00` | 1018 / 1024 / 1025 / 1010 |
+  | 2A:27:0 (Tone?) | 0x20? | `20 00 00 00 03 00` on 8 and 0 | 1041 / 1047 / 1048 / ? |
   | Reverb (mix) (1F:7A:1) | - | - | nothing changed on any preset |
+
+  (FX2 to 2A:27:0: 2026-11-07, `captures/dump_params.txt`. All read back as set except
+  2A:27:0 on preset 14, where one byte changed but no float matched.)
+- **The panel block is regular:** records 20 bytes apart, ids stepping by 2: FX knob 1
+  0x26, FX1 0x28, FX knob 2 0x2A, FX2 0x2C, FX knob 3 0x2E, FX3 0x30, Reverb 0x32 (and
+  Volume 0x3C further on). The FX on/off records have type byte 01, the knobs 03.
 
   "-" = the set changed nothing. Every value in the table reads back as set (MSB-first
   unpacking, both runs), at exactly one offset, except FX1 on preset 8: one byte changed
@@ -378,8 +390,44 @@ Test vectors (app captures; the decoder maps these to the value shown):
 | Volume (0x74, 0x24, sub 3) | **confirmed** by the dump on 4 presets (section 3) |
 | Reverb (panel 74:20:3) | **confirmed** by the dump on 4 presets (section 3) |
 | Reverb (block 1F:7A:1) | changes nothing in the dump on 4 presets. **Probably not a settable parameter** |
-| FX1 (74:48:3), FX Knob (FX1) (74:1A:3) | **confirmed** by the dump on 4 presets (section 3) |
+| FX1 to FX3 (74:48 / 47 / 46:3) and their FX knobs (74:1A / 1C / 1E:3) | **confirmed** by the dump on 4 presets (section 3) |
+| Tone (part) (2A:24:0) and 2A:27:0 | **confirmed** by the dump; which is Treble and which is Presence isn't known |
 | Sub values other than 0 and 3 | unconfirmed (no capture of the app doing it) |
+
+### Two sets in a row can stop all sets (2026-11-07, `captures/amp_survey_2.txt`)
+
+`tools/amp_survey.py` sent Drive as both ids, 0x25 then 0x26, straight after each other
+(no wait for an answer), on Chime then Jungle $lash:
+
+- The first pair got **one** answer (the 29-byte message) and its status message, and
+  Chime's Drive (0x25) changed to 0.1.
+- After that, **no set worked and none was answered**: the next pair on Chime, and both
+  pairs on Jungle $lash after a preset select. The dump showed the old values, and
+  nothing changed by ear. Selects, dumps and knob events still worked.
+- The run before it (`captures/amp_survey.txt`) did the same, and a new handshake made
+  sets work again.
+- In `tools/dump_params.py`, sets of the unused Drive id did no harm, but there each set
+  was 0.5 s and a dump apart.
+
+**Cause (confirmed 2026-11-07, `tools/set_pace.py`, `captures/set_pace.txt`, on Chime with
+a new handshake before each case):**
+
+| Case | Result |
+|---|---|
+| Two sets, each sent after the previous one's answer | both worked, one answer each |
+| Two sets of the same id (0x25) with no wait | the **first** worked and was answered; the second was dropped |
+| ...then a set 1 s later, 5 s after that, after a preset select, after a dump | **none** worked, **none** answered |
+| An unused id (0x26 on Chime) on its own, then a normal set | both answered, the normal set worked: an unused id is harmless |
+
+- **Sending a set before the amp has answered the previous one makes the amp drop it
+  and then ignore every later set** for the rest of the session. Only a new handshake
+  brings sets back. Selects, dumps and knob events keep working meanwhile.
+- The answer (the 29-byte message) arrives within about 0.05 s, so waiting for it costs
+  almost nothing.
+- Rules: **one set at a time, and wait for its answer before sending the next.** If no
+  answer comes within about 1 s, sets are probably dead, and a new handshake is needed.
+  A slider should send only its latest value once the previous set is answered, not
+  every step.
 
 ### What the amp sends back after a set (confirmed, 2026-11-06)
 
@@ -407,8 +455,9 @@ probably an index into the amp's preset list.
 **The value is the preset-list index (confirmed 2026-11-06, `captures/check_amp_2.txt`):**
 21, 60, 114, 124 and 127 each loaded the name the preset list (section 4) gives for that
 index ("Angel P-Ball", "The Trooper", "AmbientAco", "User 1", "User 4"). **115 timed out**
-(no dump within 4 s). 115 to 123 are the names only the short list has, so they may not be
-loadable presets. Not retried yet.
+(no dump within 4 s). On 2026-11-07 (`captures/amp_survey_2.txt`) 116 to 123 all loaded
+the names the list gives, in about 0.4 s each, but **115 ("DirtyAcoBlues") timed out
+again**. So all 128 except 115 load. Why 115 doesn't load isn't known.
 
 **Sent from the Pi (2026-11-03, `tools/preset_select.py`, `captures/preset_select_2.txt`):**
 preset select works (**confirmed**). The dump request right after it returns the newly
@@ -456,6 +505,22 @@ Observed on 2026-11-03 (causes are not proven):
 - A truncated write leaves the amp part-way through a SysEx message (**inferred** as
   a cause).
 - Power is fine (`vcgencmd get_throttled` = 0x0).
+
+### Losing and getting back the amp (2026-11-07, `captures/amp_survey_2.txt`)
+
+| What happened | Noticed | Device back | New handshake |
+|---|---|---|---|
+| USB pulled while connected, then plugged back in | at once: `OSError(19, 'No such device')` from the read | at once, **same path** (`/dev/snd/midiC3D0`) | first try, 14.2 s, dump and all 128 names |
+| Amp switched off while connected (USB left in), then on | about 1 s later, the same `OSError(19)` | 2.6 s after switching on, same path | first try, 13.3 s, dump OK, but **no preset names (0 of 128)** |
+
+- The device path came back the same both times, but look it up again anyway
+  (`find_device()`), because the card number can change.
+- **Straight after power-on, the handshake gets the dump but no preset-list replies**,
+  so the amp seems not to be ready for those yet. A reconnect should wait a few seconds
+  after the device comes back, or check that the preset list isn't empty and ask again.
+  How long to wait hasn't been measured.
+- The USB-pull loss in `captures/check_amp.txt` (2026-11-06) took a few seconds to show
+  up in the kernel; this time it was immediate. The time is set by Linux, not the code.
 
 Working rules until this is understood:
 
@@ -505,17 +570,37 @@ These are the app's own files, used here only as reference. **Do not commit them
   is one step from the previous position. If none is, use the last value.
   Checked against the 16 clicks in `preset_clicks.txt` only.
 - The amp does not send the preset name on a click (section 4).
-- **Numbering against the knob's markings (one data point, 2026-11-06,
-  `captures/check_amp_2.txt`):** the knob's own marking 2 came out as position 2, with
-  "Insane 1: Lunatic" loaded. The markings run 1 to 16, so the numbers may match up
-  directly, with marking 16 coming out as 0 (from the `% 16`). Check at markings 1 and 16.
-  At the start of that run the knob was at marking 1 with "Chunk 2: Phat Chunk".
+- **Numbering (confirmed 2026-11-07):** the knob's marking m comes out as position m,
+  and marking 16 as position 0 (from the `% 16`).
+
+### Position → name table (confirmed 2026-11-07, `captures/amp_survey_2.txt`)
+
+Walked through markings 1 to 16, one click each, with the bounce rule and the refreshed
+name from `AmpService`. Every click settled on the expected position.
+
+| Marking | Pos | Preset | Marking | Pos | Preset |
+|---|---|---|---|---|---|
+| 1 | 1 | Chunk 2: Phat Chunk | 9 | 9 | Acoustic |
+| 2 | 2 | Insane 1: Lunatic | 10 | 10 | Clean 1: US Double |
+| 3 | 3 | Chime 1: Class-A | 11 | 11 | Clean 2: Jazz Chorus |
+| 4 | 4 | Vibe 1: Auto Wah | 12 | 12 | Chime 1: Class-A |
+| 5 | 5 | Vibe 2: Rotary | 13 | 13 | Chime 2: Echoes |
+| 6 | 6 | Acoustic | 14 | 14 | Sugar Skull |
+| 7 | 7 | Ambient 2: Glass | 15 | 15 | Crunch 2: Pasadena |
+| 8 | 8 | Bass | 16 | 0 | Jungle $lash |
+
+- Acoustic (6 and 9) and Chime 1 (3 and 12) appear twice. The old table below has the
+  same repeats, so they're probably real, not errors.
+- The old table is this one moved by one position (its position p+1 is position p here)
+  for 8 to 15 and 0; its 2 to 7 were the bounce errors.
+- Turning a knob near marking 11 sent a run of Drive (alt) reports (0.44 down to 0.0) on
+  Clean 2. Probably a physical knob was touched; it shows that knob turns are reported
+  live with the id the preset uses.
 
 ### Old position → name table (2026-10-30)
 
 Recorded before the bounce was known, assuming one click per name announcement.
-The repeated names (positions 2/15, 4/13, 5/12) may be bounce errors, so **re-check this
-table** before relying on it.
+**Superseded** by the table above.
 
 | Pos | Preset                | Pos | Preset              |
 |-----|-----------------------|-----|---------------------|
@@ -537,10 +622,16 @@ does not show up in the live stream (section 8).
 
 - The status message about 2 s after a set: does a knob-click handler mistake it for
   the end of a click? (It only settles when knob positions came first, so probably not.)
-- Can presets 115 to 123 be selected at all? (115 timed out once.)
+Answered on 2026-11-07: 116 to 123 load, 115 never does (section 8); the knob table
+and numbering (section 11); FX2, FX3, their knobs and both Tone ids are in the dump
+(section 3); what losing the amp looks like (section 9).
+
+- Is there anything short of a new handshake that brings sets back after a set was sent
+  too soon (section 8)? A select, a dump and waiting don't.
+- How long after power-on until the handshake gets the preset list (section 9).
+- Why preset 115 doesn't load.
 - The dump's block layout: how to tell which `0x1F` / `0x33` record is the amp's Drive,
   and so which Drive id the current preset uses (section 3).
-- The position → preset name table, re-recorded with the bounce rule (section 11).
 - The cause of the wedge, and a reliable way to get the dump every time.
 - Where the amp model and effect models are stored in the dump, and the layout of the
   rest of the dump (record numbering, Tone values).

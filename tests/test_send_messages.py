@@ -1,18 +1,28 @@
-"""Byte layout of the messages we send to set a parameter (protocol.md section 8).
+"""Byte layout of the messages we send to set a parameter, and of the amp's answer
+(protocol.md section 8).
 
-These test the message builders directly. What Amp sends, and its seq counter,
-are tested in test_amp.py.
+These test the message builders and the answer check directly. What Amp sends, and
+its seq counter, are tested in test_amp.py.
 """
 import unittest
 
 from spiderweb.protocol.messages import (
     BEGIN_LENGTH,
     BYTE_HEADER,
+    DUMP_REQUEST,
     SET_VALUE_LENGTH,
+    SetAnswer,
     build_begin_message,
     build_set_message,
+    is_set_answer,
 )
 from spiderweb.protocol.values import encode_set_value
+
+# Real messages from captures/set_pace.txt and captures/amp_survey_2.txt.
+SET_ANSWER = bytes.fromhex("f000010c22054d000900000b00010000000400000000000000000000f7")
+SELECT_ANSWER = bytes.fromhex("f000010c22054d017500000b00010000000400000000000000000000f7")   # channel 1
+STATUS = bytes.fromhex(
+    "f000010c22054d000a00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7")
 
 
 def drive_set(value=0.5, sequence=0x0D, unknown=1):
@@ -98,6 +108,37 @@ class TestSetMessage(unittest.TestCase):
     def test_value_must_be_five_bytes(self):
         with self.assertRaises(ValueError):
             build_set_message(0x0D, 0x2A, 0, 0x25, bytes(4))
+
+
+class TestSetAnswer(unittest.TestCase):
+    def test_the_amps_answer_to_a_set(self):
+        self.assertTrue(is_set_answer(SET_ANSWER))
+
+    def test_the_answer_to_a_select_is_not_it(self):
+        # Same shape, but on channel 1 (msg[7] == 1).
+        self.assertFalse(is_set_answer(SELECT_ANSWER))
+
+    def test_other_messages_are_not_it(self):
+        for msg in (DUMP_REQUEST, STATUS, build_begin_message(0x0C), drive_set(), b""):
+            self.assertFalse(is_set_answer(msg), msg.hex())
+
+    def test_collector_is_complete_after_the_answer(self):
+        collector = SetAnswer()
+        self.assertFalse(collector.complete())
+        self.assertTrue(collector.offer(SET_ANSWER))
+        self.assertTrue(collector.complete())
+
+    def test_collector_refuses_other_messages(self):
+        collector = SetAnswer()
+        self.assertFalse(collector.offer(STATUS))
+        self.assertFalse(collector.offer(SELECT_ANSWER))
+        self.assertFalse(collector.complete())
+
+    def test_collector_takes_only_one_answer(self):
+        # A second answer belongs to the next set, so it must be left for that set's collector.
+        collector = SetAnswer()
+        collector.offer(SET_ANSWER)
+        self.assertFalse(collector.offer(SET_ANSWER))
 
 
 if __name__ == "__main__":

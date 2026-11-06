@@ -1,4 +1,6 @@
-"""Does a set work only when its sequence number follows the amp's own counter?
+"""(Archived 2026-11-07: answered, see protocol.md section 8. Since Amp.set_raw waits for the amp's answer, the answer no longer reaches listeners, so this tool's answer counts read 0.)
+
+Does a set work only when its sequence number follows the amp's own counter?
 
 Usage (from the project root, on the Pi, amp on, guitar plugged in):
     python3 -m tools.seq_check

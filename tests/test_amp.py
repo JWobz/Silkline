@@ -2,15 +2,18 @@
 
 The amp itself is the FakeTransport from test_connection.py, so these check that
 Amp sends the right messages and that its replies come back through the connection.
+Like the real amp, the fake answers every set (protocol.md section 8) unless a test
+says otherwise.
 """
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
 from spiderweb.amp import Amp, load_handshake
 from spiderweb.connection import Connection
-from spiderweb.errors import AmpDisconnected, AmpTimeout
+from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
 from spiderweb.protocol.messages import (
     DUMP_REQUEST,
     build_begin_message,
@@ -26,9 +29,22 @@ HELLO = b"\xf0hello\xf7"
 HELLO_REPLY = b"\xf0hello-reply\xf7"
 OTHER = b"\xf0other\xf7"
 FIRST_SEQ = 0x0C        # protocol.md section 2: our seq starts here after the handshake
+# The amp's answer to a set, from captures/set_pace.txt (protocol.md section 8).
+SET_ANSWER = bytes.fromhex("f000010c22054d000900000b00010000000400000000000000000000f7")
 
 DRIVE = BY_NAME["drive"]
 TAP_HOLD = BY_NAME["tap (hold)"]
+
+
+def is_set(msg):
+    """ A 37-byte set message (the second of a set's two messages). """
+    return len(msg) == 37 and msg[11] == 0x0F
+
+
+def answers_sets(other=None):
+    """ auto_reply for the fake: answers every set with SET_ANSWER, and anything else with `other`. """
+    other = other or (lambda msg: [])
+    return lambda msg: [SET_ANSWER] if is_set(msg) else other(msg)
 
 
 def chime_dump():
@@ -50,8 +66,13 @@ def sets_in(sent):
 
 
 class AmpTest(unittest.TestCase):
-    """ Gives each test a fake transport, a real Connection and an Amp, and always closes them. """
-    def make(self, handshake=(), connect=True, **fake_args):
+    """ Gives each test a fake transport, a real Connection and an Amp, and always closes them.
+
+    The fake answers sets as the amp does; pass answer_sets=False for one that doesn't.
+    """
+    def make(self, handshake=(), connect=True, answer_sets=True, **fake_args):
+        if answer_sets:
+            fake_args["auto_reply"] = answers_sets(fake_args.get("auto_reply"))
         self.fake = FakeTransport(**fake_args)
         self.factory_calls = 0
         def factory():
@@ -179,6 +200,71 @@ class TestSet(AmpTest):
             self.assertEqual(len(begin), 29, "a set message where a begin should be")
             self.assertEqual(len(set_msg), 37, "a begin message where a set should be")
             self.assertEqual(set_msg[8], (begin[8] + 1) % 128)
+
+    def test_a_set_waits_for_the_answer_before_the_next(self):
+        # A set sent before the amp has answered the previous one kills all sets
+        # (protocol.md section 8), so a set must wait for its answer.
+        order = []
+        amp, fake = self.make(answer_sets=False)
+
+        def slow_amp(msg):
+            order.append("set" if is_set(msg) else "begin")
+            if is_set(msg):
+                def answer():
+                    order.append("answer")
+                    fake.arrive(SET_ANSWER)
+                threading.Timer(0.2, answer).start()
+            return []
+        fake.auto_reply = slow_amp
+        threads = [threading.Thread(target=amp.set_parameter, args=(DRIVE, 0.5)) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=3)
+        self.assertEqual(order, ["begin", "set", "answer", "begin", "set", "answer"])
+
+    def test_no_answer_times_out(self):
+        amp, fake = self.make(answer_sets=False)
+        start = time.time()
+        with self.assertRaises(AmpTimeout):
+            amp.set_parameter(DRIVE, 0.5)
+        self.assertLess(time.time() - start, 2.5)
+        self.assertEqual(len(fake.sent), 2)            # it was sent, just never answered
+
+    def test_a_set_after_a_timeout_still_moves_seq_on(self):
+        amp, fake = self.make(answer_sets=False)
+        with self.assertRaises(AmpTimeout):
+            amp.set_parameter(DRIVE, 0.5)
+        fake.auto_reply = answers_sets()
+        amp.set_parameter(DRIVE, 0.5)
+        self.assertEqual(sets_in(fake.sent), [(0x0C, 0x0D), (0x0E, 0x0F)])
+
+    def test_the_answer_isnt_passed_to_listeners(self):
+        amp, fake = self.make()
+        listener = Recorder()
+        amp.add_listener(listener)
+        amp.set_parameter(DRIVE, 0.5)
+        fake.arrive(OTHER)
+        self.assertTrue(listener.wait_for())
+        self.assertEqual(listener.calls, [OTHER])
+
+    def test_set_from_a_listener_is_refused(self):
+        # A set waits for an answer that only the reader thread can deliver.
+        amp, fake = self.make()
+        errors = []
+
+        def set_from_listener(msg):
+            try:
+                amp.set_parameter(DRIVE, 0.5)
+            except AmpError as e:
+                errors.append(e)
+        amp.add_listener(set_from_listener)
+        fake.arrive(OTHER)
+        deadline = time.time() + 2
+        while not errors and time.time() < deadline:
+            time.sleep(0.02)
+        self.assertEqual(len(errors), 1)
+        self.assertNotIsInstance(errors[0], AmpTimeout)
 
     def test_set_after_unplug_fails_fast(self):
         amp, fake = self.make()

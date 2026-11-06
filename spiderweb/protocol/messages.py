@@ -1,3 +1,10 @@
+"""
+ messages.py
+ 
+ Handles the messages that is sent and recieved from amp and machine
+ 
+ """
+
 from enum import Enum
 
 from spiderweb.protocol.presets import entry_name
@@ -28,6 +35,24 @@ class MessageKind(Enum):
     PRESET_CHANGE = "preset_change"
     STATUS = "status"
 
+def is_set_answer(msg):
+    """The 29-byte channel-0 message the amp sends straight after a set (protocol.md section 8)."""
+    return len(msg) == 29 and msg[:7] == HEADER and msg[7] == 0 and msg[11] == 0x0B and msg[13] == 0x01
+
+class SetAnswer():
+    """Collector for request(): complete once the amp has answered a set."""
+    def __init__(self):
+        self.msg = None
+
+    def offer(self, msg):
+        if self.msg is None and is_set_answer(msg):
+            self.msg = msg
+            return True
+        return False
+
+    def complete(self):
+        return self.msg is not None
+        
 
 def classify(msg):
     """Classify a message from the amp into a known type, if possible. Returns a tuple of (kind, *args) where kind is a MessageKind and args are additional data depending on the kind."""

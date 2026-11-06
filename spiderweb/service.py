@@ -154,17 +154,24 @@ class AmpService:
     def set(self, name, value):
         """Sets a parameter by name (any case, e.g. "drive") to a value from 0 to 1.
 
-        Doesn't change the state itself: the amp reports the new value back and
-        handle_message records it, so get() shows it a moment later.
-        Raises AmpDisconnected if not connected, ValueError for an unknown or
-        unsettable parameter or a value out of range.
+        Waits for the amp's answer, then records the value and sends
+        PARAMETER_CHANGED. The amp never reports a set back (protocol.md
+        section 8), so what was sent is what get() shows; later knob turns
+        still come in through handle_message. Don't call it from an on_change
+        callback. Raises AmpDisconnected if not connected, AmpTimeout if the
+        amp doesn't answer (the state is then unchanged), ValueError for an
+        unknown or unsettable parameter or a value out of range.
         """
         if self._amp is None:
             raise AmpDisconnected("not connected")
         param = BY_NAME.get(name.lower())
         if param is None:
             raise ValueError("Cannot find parameter to set")
+
         self._amp.set_parameter(param, value)
+        with self._threading_lock:
+            self._state.params[param.key] = value
+        self._emit(EventType.PARAMETER_CHANGED, {"key": param.key, "name": param.name, "value": value})
 
     def get(self, name):
         """The last value the amp reported for a parameter (0 to 1), or None if none yet.
@@ -216,7 +223,7 @@ class AmpService:
         """Calls callback(event) for every Event.
 
         Most events arrive on the reader thread, so keep callbacks quick and
-        don't call select_preset() from one.
+        don't call set() or select_preset() from one: both wait for the amp.
         """
         self._callbacks.append(callback)
 

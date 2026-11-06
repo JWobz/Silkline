@@ -21,6 +21,7 @@ from spiderweb.protocol.parameters import BY_NAME
 from spiderweb.protocol.values import encode_set_value
 from spiderweb.service import AmpService, ConnectionState, EventType
 from tests.test_connection import FakeTransport, capture_messages
+from tests.test_amp import SET_ANSWER, is_set
 from tests.test_dump import preset_select_section
 from tests.test_presets import ACOUSTIC, BASS_LONG, LONG_0, SHORT_0, SHORT_5, USER_1
 
@@ -86,15 +87,19 @@ class Events:
 
 
 class AnswersDumps:
-    """ auto_reply for the fake: answers each dump request with `dump` (changeable),
-    the messages in `others` with their replies, and nothing else. """
+    """ auto_reply for the fake: answers each dump request with `dump` (changeable), each
+    set with the amp's set answer (unless answer_sets is False), the messages in `others`
+    with their replies, and nothing else. """
     def __init__(self, dump=(), others=None):
         self.dump = list(dump)
         self.others = others or {}
+        self.answer_sets = True
 
     def __call__(self, msg):
         if msg == DUMP_REQUEST:
             return self.dump
+        if is_set(msg):
+            return [SET_ANSWER] if self.answer_sets else []
         return self.others.get(msg, [])
 
 
@@ -265,16 +270,37 @@ class TestSetGet(ServiceTest):
         service, fake, events = self.make()
         service.set("DRIVE", 0.5)
         self.assertEqual(len(fake.sent), 2)
-        self.assertIsNone(service.get("Drive"))
+        self.assertEqual(service.get("Drive"), 0.5)
 
-    def test_state_changes_when_the_amp_reports_not_when_we_send(self):
+    def test_set_records_the_value_once_answered(self):
+        # The amp never reports a set back (protocol.md section 8), so the service
+        # records what it sent once the amp has answered.
         service, fake, events = self.make()
         service.set("drive", 0.5)
-        self.assertIsNone(service.get("drive"))        # nothing reported yet
-        fake.arrive(DRIVE_REPORT)
-        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PARAMETER_CHANGED))
+        self.assertEqual(service.get("drive"), 0.5)
+        self.assertEqual(service.state().params[DRIVE.key], 0.5)
+
+    def test_set_sends_parameter_changed(self):
+        service, fake, events = self.make()
+        service.set("drive", 0.5)
+        changes = events.of(EventType.PARAMETER_CHANGED)
+        self.assertEqual([e.data for e in changes], [{"key": DRIVE.key, "name": "Drive", "value": 0.5}])
+
+    def test_an_unanswered_set_changes_nothing(self):
+        service, fake, events = self.make()
+        self.replies.answer_sets = False
+        with self.assertRaises(AmpTimeout):
+            service.set("drive", 0.5)
+        self.assertIsNone(service.get("drive"))
+        self.assertEqual(events.of(EventType.PARAMETER_CHANGED), [])
+
+    def test_a_knob_report_after_a_set_still_counts(self):
+        service, fake, events = self.make()
+        service.set("drive", 0.5)
+        fake.arrive(DRIVE_REPORT)                      # the Drive knob turned to about 0.99
+        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PARAMETER_CHANGED
+                                        and e.data["value"] > 0.9))
         self.assertAlmostEqual(service.get("drive"), 0.99, places=2)
-        self.assertEqual(events.of(EventType.PARAMETER_CHANGED)[0].data["name"], "Drive")
 
     def test_unknown_name_is_refused(self):
         service, fake, events = self.make()

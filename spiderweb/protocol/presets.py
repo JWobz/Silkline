@@ -20,16 +20,17 @@ def unpack(msg):
     for data byte k. The last group can be shorter. The F7 that ends the
     message isn't data.
     """
-    body = msg[12:-1]    # removes header
+    body = msg[12:-1]  # removes header
     out = bytearray()
     for start in range(0, len(body), 8):
-        group = body[start:start+8]
+        group = body[start : start + 8]
         tops = group[0]
         for k, b in enumerate(group[1:]):
             if tops & (0x40 >> k):
                 b = b | 0x80
             out.append(b)
     return bytes(out)
+
 
 def preset_list_request(msg):
     """Returns (kind, index) if msg is a preset-list request, or None.
@@ -42,6 +43,7 @@ def preset_list_request(msg):
     if len(msg) == 29 and msg[11] == 0x0B and (msg[13] == 0x06 or msg[13] == 0x0E):
         return (msg[13], msg[22])
     return None
+
 
 def entry_name(msg):
     """Returns the preset name in a preset-list entry, or None if msg isn't one.
@@ -57,14 +59,15 @@ def entry_name(msg):
     if 45 <= len(msg) <= 77 and msg[13] == 1 and msg[7] == 1:
         u = unpack(msg)
         if u[4] == u[12] + 8:
-            raw = u[16:16 + u[12]-1]
+            raw = u[16 : 16 + u[12] - 1]
             if all(32 <= b < 127 for b in raw):
                 name = raw.decode("ascii")
         elif len(u) > 28 and u[4] == u[28] + 24:
-            raw = u[32:32 + u[28] - 1]
+            raw = u[32 : 32 + u[28] - 1]
             if all(32 <= b < 127 for b in raw):
                 name = raw.decode("ascii")
     return name
+
 
 def preset_names(lines, replies_per_line):
     """Builds {index: name} for every preset named in the handshake.
@@ -93,8 +96,5 @@ def preset_names(lines, replies_per_line):
                 break
     names = dict(short)
     for index, name in long.items():
-        names.setdefault(index, name)   
+        names.setdefault(index, name)
     return names
-
-            
-

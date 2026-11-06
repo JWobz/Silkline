@@ -1,0 +1,16 @@
+09:29:38 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+09:29:52 event connection_changed {'state': <ConnectionState.CONNECTED: 'connected'>}
+09:29:52 RESULT connect: connected after 14.2s (attempt 1); preset 'Jungle $lash'; 128 preset names
+09:30:11 you typed '' for: Press Enter to start (s to skip):
+09:30:11 raw  29 f000010c22054d017500000b00010000000400000000000000000000f7
+09:30:11 raw  45 f000010c22054d000800010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+09:30:11 event preset_changed {'number': 4, 'name': 'Chime 1: Class-A'}
+09:30:11 raw  29 f000010c22054d000900000b00010000000400000000000000000000f7
+09:30:13 raw  45 f000010c22054d000a00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+09:30:13 RESULT drive 4 0.1: 'Chime 1: Class-A': the dump's Drive reads 0.100
+09:30:16 RESULT drive 4 0.9: 'Chime 1: Class-A': the dump's Drive reads 0.100
+09:30:49 stopped with Ctrl-C
+09:30:49 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+09:30:49 connect: connected after 14.2s (attempt 1); preset 'Jungle $lash'; 128 preset names
+09:30:49 drive 4 0.1: 'Chime 1: Class-A': the dump's Drive reads 0.100
+09:30:49 drive 4 0.9: 'Chime 1: Class-A': the dump's Drive reads 0.100
