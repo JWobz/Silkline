@@ -141,7 +141,7 @@ class AmpConsole:
             self.logger.info(f"{self.name_for(key):<20} = {value:.3f}")
 
     def cmd_set(self, args):
-        """ set <param> <value> : set a parameter to a value from 0 to 1 """
+        """ set <param> <value> : set a parameter (a float in its range, or 0 / 1 for an on/off) """
         if len(args) < 2:
             self.logger.error("Usage: set <param> <value>")
             return
@@ -153,9 +153,13 @@ class AmpConsole:
         try:
             value = float(value_text)
         except ValueError:
-            self.logger.error("Value must be a number between 0 and 1.")
+            self.logger.error("Value must be a number.")
             return
-        self.amp.set_parameter(param, value)     # waits for the amp's answer (protocol.md section 8)
+        try:
+            self.amp.set_parameter(param, value)     # waits for the amp's answer (protocol.md section 8)
+        except ValueError as e:
+            self.logger.error(str(e))
+            return
         self.logger.info(f"Set {param.name} = {value:.3f} (the amp answered)")
 
     def cmd_get(self, args):

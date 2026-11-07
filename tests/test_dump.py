@@ -1,38 +1,7 @@
 import unittest
-from pathlib import Path
 
 from spiderweb.protocol.dump import DumpCollector
-
-CAPTURES = Path(__file__).resolve().parent.parent / "captures"
-
-TAP = bytes.fromhex("f000010c22054d003f00000f0005000000080000020004000000767a401d420000000000f7")
-PARAM = bytes.fromhex("f000010c22054d0008000107000400000010000000002a0000002500010000040000007f407e7e3f00000000f7")
-
-
-def capture_messages(name):
-    """ Every hex message in a capture file (the last word of each line; other lines skipped). """
-    messages = []
-    for line in (CAPTURES / name).read_text().splitlines():
-        words = line.split()
-        if not words:
-            continue
-        try:
-            messages.append(bytes.fromhex(words[-1]))
-        except ValueError:
-            continue
-    return messages
-
-
-def preset_select_section(name, value):
-    """ The messages logged under 'value N:' in a tools/preset_select.py log. """
-    messages, inside = [], False
-    for line in (CAPTURES / name).read_text().splitlines():
-        if line.startswith("value"):
-            inside = line.split(":")[0].split()[1] == str(value)
-            continue
-        if inside and line.strip():
-            messages.append(bytes.fromhex(line.strip()))
-    return messages
+from tests.helpers import GAIN_REPORT as PARAM, TAP, capture_messages, preset_select_section
 
 
 def collect(messages):

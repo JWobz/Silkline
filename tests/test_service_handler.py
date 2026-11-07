@@ -1,9 +1,7 @@
 import unittest
-from pathlib import Path
 
 from spiderweb.service import AmpService, EventType
-
-CAPTURES = Path(__file__).resolve().parent.parent / "captures"
+from tests.helpers import capture_messages as read_capture
 
 # Real messages from the captures (see protocol.md).
 TAP = "f000010c22054d003f00000f0005000000080000020004000000767a401d420000000000f7"
@@ -11,20 +9,6 @@ SAVE = "f000010c22054d0045000107000300000010000000000200000008000000000200000001
 REVERB_LOW = "f000010c22054d005700010700040000001000000000740300002003010000040000000c400b0b3f00000000f7"   # about 0.543
 REVERB_JITTER = "f000010c22054d006000010700040000001000000000740300002003010000040000000e400d0d3f00000000f7"  # about 0.551
 AMP_02 = "f000010c22054d000b000107000400000010000000002a000000020000000004000000514031034d00000000f7"
-
-
-def read_capture(name):
-    """ Messages from a capture file: the last word of each line, skipping lines that aren't hex. """
-    messages = []
-    for line in (CAPTURES / name).read_text().splitlines():
-        words = line.split()
-        if not words:
-            continue
-        try:
-            messages.append(bytes.fromhex(words[-1]))
-        except ValueError:
-            continue
-    return messages
 
 
 class Recorder:

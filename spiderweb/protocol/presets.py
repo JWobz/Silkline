@@ -11,6 +11,8 @@ which preset it's for, so it is matched to the request it answers by handshake
 line; the message counters drift, so they can't be used.
 """
 
+# Presets the amp lists but won't load: selecting them never sends a dump (protocol.md section 8).
+UNLOADABLE = {115}
 
 def unpack(msg):
     """Undoes the amp's 7-bit packing of msg[12:-1] and returns the data bytes.

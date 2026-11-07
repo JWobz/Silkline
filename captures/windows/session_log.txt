@@ -1,0 +1,54 @@
+# SpiderWeb-Amp capture gatherer log
+# clock (PC local time)  epoch  event  | note
+
+14:25:19.149  1794014719.149  recording started
+14:19:23.250  1794014363.250  done chains:User 1  | test note
+14:21:56.438  1794014516.438  done chains:Plateau of Leng
+14:22:36.763  1794014556.763  done chains:Plateau of Leng  | Amp Volume
+14:27:03.512  1794014823.512  done chains:User 1  | gate (off) wah(off) stomp(off) amp(on) comp(off) eq(off) volume(on) delay(off) mod(off) reverb(off)
+14:29:22.561  1794014962.561  done chains:Chime 1: Class-A  | Gate(on) volume(on) wah(off) stomp(off) amp(on) comp(on) eq(on) mod(off) delay(off) reverb(on)
+14:30:35.877  1794015035.877  done chains:Jungle $lash  | Gate(on) volume(on) wah(off) stomp(off) mod(off) amp(on) comp(off) eq(on)  delay(off) reverb(on)
+14:31:35.063  1794015095.063  done chains:Ambient 1: Black Hole  | Gate(on) volume(on) wah(off) stomp(off) amp(on) comp(on) eq(on) mod(on)  delay(on) reverb(on)
+14:31:55.801  1794015115.801  done pick
+14:32:40.630  1794015160.630  done onoff:Gate
+14:33:16.595  1794015196.595  done onoff:Wah
+14:33:38.747  1794015218.747  done onoff:Stomp
+14:34:00.647  1794015240.647  done onoff:Synth / mod slot
+14:34:41.457  1794015281.457  done onoff:Amp  | can of switch between amp and cab
+14:34:56.768  1794015296.768  done onoff:Comp
+14:35:10.930  1794015310.930  done onoff:EQ
+14:35:26.361  1794015326.361  done onoff:Vol
+14:35:47.455  1794015347.455  done onoff:Delay
+14:36:01.697  1794015361.697  done onoff:Reverb
+14:36:17.547  1794015377.547  done onoff:Cab (if the app has a switch for it)
+14:37:17.300  1794015437.300  done types:Wah  | fassel-> line6
+14:38:06.044  1794015486.044  done types:Stomp  | fuzz Pi -> screamer
+14:38:47.654  1794015527.654  done types:Synth / mod slot  | phaser -> U-Vibe
+14:39:45.376  1794015585.376  done types:Amp  | brit gain 18 -> 1965 plexi 45
+14:40:36.119  1794015636.119  done types:Cab  | 4x12 Green 20's -> 4x12 Green 25's
+14:41:14.796  1794015674.796  done types:Delay  | tube echo -> multi-head display
+14:41:47.140  1794015707.140  done types:Reverb  | slap plate -> vintage plate
+14:43:09.843  1794015789.843  done knobs:Wah  | "position" on line 6 and fassel
+14:43:34.850  1794015814.850  done knobs:Stomp  | drive, gain, tone of fuzz pi
+14:44:06.150  1794015846.150  done order
+14:45:25.535  1794015925.535  done saveas  | saved
+14:45:57.223  1794015957.223  done restore  | cant restore
+
+# notes per step
+chains:User 1: gate (off) wah(off) stomp(off) amp(on) comp(off) eq(off) volume(on) delay(off) mod(off) reverb(off)
+chains:Plateau of Leng: Gate(on) volume(on) wah(off) mod(on) stomp(on) amp(on) comp(on) eq(off) delay(on) reverb(off)
+chains:Chime 1: Class-A: Gate(on) volume(on) wah(off) stomp(off) amp(on) comp(on) eq(on) mod(off) delay(off) reverb(on)
+chains:Jungle $lash: Gate(on) volume(on) wah(off) stomp(off) mod(off) amp(on) comp(off) eq(on)  delay(off) reverb(on)
+chains:Ambient 1: Black Hole: Gate(on) volume(on) wah(off) stomp(off) amp(on) comp(on) eq(on) mod(on)  delay(on) reverb(on)
+onoff:Amp: can of switch between amp and cab
+types:Wah: fassel-> line6
+types:Stomp: fuzz Pi -> screamer
+types:Synth / mod slot: phaser -> U-Vibe
+types:Amp: brit gain 18 -> 1965 plexi 45
+types:Cab: 4x12 Green 20's -> 4x12 Green 25's
+types:Delay: tube echo -> multi-head display
+types:Reverb: slap plate -> vintage plate
+knobs:Wah: "position" on line 6 and fassel
+knobs:Stomp: drive, gain, tone of fuzz pi
+saveas: saved 
+restore: cant restore

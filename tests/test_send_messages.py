@@ -16,10 +16,11 @@ from spiderweb.protocol.messages import (
     build_set_message,
     is_set_answer,
 )
+from spiderweb.protocol.parameters import PARAMETERS
 from spiderweb.protocol.values import encode_set_value
+from tests.helpers import SET_ANSWER
 
-# Real messages from captures/set_pace.txt and captures/amp_survey_2.txt.
-SET_ANSWER = bytes.fromhex("f000010c22054d000900000b00010000000400000000000000000000f7")
+# Real messages from captures/amp_survey_2.txt (SET_ANSWER is in helpers.py).
 SELECT_ANSWER = bytes.fromhex("f000010c22054d017500000b00010000000400000000000000000000f7")   # channel 1
 STATUS = bytes.fromhex(
     "f000010c22054d000a00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7")
@@ -27,12 +28,12 @@ STATUS = bytes.fromhex(
 
 def drive_set(value=0.5, sequence=0x0D, unknown=1):
     """ A set message for Drive (block 0x2A, sub 0, id 0x25). """
-    return build_set_message(sequence, 0x2A, 0, 0x25, encode_set_value(value), unknown)
+    return build_set_message(sequence, 0x2A, 0, 0x25, encode_set_value(value), 0, unknown=unknown)
 
 
 def panel_volume_set(value=0.5, unknown=1):
     """ A set message for panel Volume (block 0x74, sub 3, id 0x24). """
-    return build_set_message(0x0D, 0x74, 3, 0x24, encode_set_value(value), unknown)
+    return build_set_message(0x0D, 0x74, 3, 0x24, encode_set_value(value), 3, unknown=unknown)
 
 
 class TestBeginMessage(unittest.TestCase):
@@ -73,25 +74,41 @@ class TestSetMessage(unittest.TestCase):
         self.assertEqual(msg[13], 0x2A)   # block
         self.assertEqual(msg[14], 0)      # sub
         self.assertEqual(msg[17], 0x25)   # parameter id
-        self.assertEqual(msg[18], 0)      # sub repeated
+        self.assertEqual(msg[18], 0)      # id namespace
 
-    def test_panel_block_puts_sub_in_both_places(self):
+    def test_panel_block_fields(self):
         msg = panel_volume_set()
         self.assertEqual(msg[13], 0x74)
         self.assertEqual(msg[14], 3)
         self.assertEqual(msg[17], 0x24)
         self.assertEqual(msg[18], 3)
 
+    def test_namespace_can_differ_from_sub(self):
+        # Reverb mix from the app capture: block 1F sub 3, id 7A in namespace 1.
+        msg = build_set_message(0x0D, 0x1F, 3, 0x7A, encode_set_value(0.5), 1)
+        self.assertEqual(msg[13], 0x1F)
+        self.assertEqual(msg[14], 3)
+        self.assertEqual(msg[17], 0x7A)
+        self.assertEqual(msg[18], 1)
+
+    def test_every_parameter_builds_with_its_own_namespace(self):
+        # Namespaces seen so far are 0 to 3 (protocol.md section 8).
+        for p in PARAMETERS:
+            with self.subTest(p.name):
+                self.assertIn(p.namespace, range(4))
+                msg = build_set_message(0x0D, p.block, p.sub, p.id, encode_set_value(0.5), p.namespace)
+                self.assertEqual((msg[13], msg[14], msg[17], msg[18]), (p.block, p.sub, p.id, p.namespace))
+
     def test_value_bytes_are_where_the_decoder_expects_them(self):
         raw5 = encode_set_value(0.75)
-        msg = build_set_message(0x0D, 0x2A, 0, 0x25, raw5)
+        msg = build_set_message(0x0D, 0x2A, 0, 0x25, raw5, 0)
         self.assertEqual(msg[26:31], raw5)
 
     def test_padding_after_value_is_zero(self):
         self.assertEqual(drive_set()[31:36], bytes(5))
 
     def test_unknown_byte_defaults_to_one_and_can_be_changed(self):
-        self.assertEqual(build_set_message(0x0D, 0x2A, 0, 0x25, encode_set_value(0.5))[20], 1)
+        self.assertEqual(build_set_message(0x0D, 0x2A, 0, 0x25, encode_set_value(0.5), 0)[20], 1)
         self.assertEqual(drive_set(unknown=3)[20], 3)
 
     def test_matches_the_app_capture_layout(self):
@@ -107,7 +124,7 @@ class TestSetMessage(unittest.TestCase):
 
     def test_value_must_be_five_bytes(self):
         with self.assertRaises(ValueError):
-            build_set_message(0x0D, 0x2A, 0, 0x25, bytes(4))
+            build_set_message(0x0D, 0x2A, 0, 0x25, bytes(4), 0)
 
 
 class TestSetAnswer(unittest.TestCase):

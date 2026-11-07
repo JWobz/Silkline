@@ -1,0 +1,58 @@
+13:35:46 connecting (about 15 s)...
+13:35:46 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+13:36:01 event connection_changed {'state': <ConnectionState.CONNECTED: 'connected'>}
+13:36:01 RESULT connect: PASS - 14.2s, preset 'Jungle $lash', 127 preset names (115 left out)
+13:36:01 RESULT connect values: PASS - from the dump: {(116, 26, 3): 1.0, (116, 72, 3): 0, (116, 28, 3): 0.5, (116, 71, 3): 0, (116, 30, 3): 0.449, (116, 70, 3): 0, (116, 32, 3): 0.291, (116, 36, 3): 0.24, (42, 36, 0): 0.569, (42, 38, 0): 0.764, (42, 39, 0): 0.716}
+13:36:09 you typed '' for: Press Enter to start (s to skip):
+13:36:09 raw  29 f000010c22054d017500000b00010000000400000000000000000000f7
+13:36:10 raw  45 f000010c22054d000900010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+13:36:10 event preset_changed {'number': 4, 'name': 'Chime 1: Class-A'}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.1}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.2}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.3}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.4}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.5}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.6}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.7}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.8}
+13:36:10 event parameter_changed {'key': (42, 37, 0), 'name': 'Drive', 'value': 0.9}
+13:36:10 RESULT sliders 4 Chime 1: Class-A: PASS - 9 moves -> 9 sets [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] to (42, 37, 0); get('drive') = 0.9
+13:36:10 RESULT drive pick 4: PASS - "drive" went to 0x25 (expected 0x25)
+13:36:12 raw  45 f000010c22054d001300010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+13:36:33 you typed 'n' for: On 'Chime 1: Class-A', did the drive end up high? (y/n)
+13:36:33 RESULT sliders 4 by ear: FAIL - you said 'n'
+13:36:33 raw  29 f000010c22054d017700000b00010000000400000000000000000000f7
+13:36:33 raw  45 f000010c22054d001400010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+13:36:33 event preset_changed {'number': 8, 'name': 'Jungle $lash'}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.1}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.2}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.3}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.4}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.5}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.6}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.7}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.8}
+13:36:33 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive (alt)', 'value': 0.9}
+13:36:33 RESULT sliders 8 Jungle $lash: PASS - 9 moves -> 9 sets [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] to (42, 38, 0); get('drive') = 0.9
+13:36:33 RESULT drive pick 8: PASS - "drive" went to 0x26 (expected 0x26)
+13:36:35 raw  45 f000010c22054d001e00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+13:36:46 you typed 'y' for: On 'Jungle $lash', did the drive end up high? (y/n)
+13:36:46 RESULT sliders 8 by ear: PASS - you said 'y'
+13:37:03 you typed '' for: Press Enter to start (s to skip):
+13:37:03 raw  29 f000010c22054d017900000b00010000000400000000000000000000f7
+13:37:04 raw  45 f000010c22054d001f00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+13:37:04 event preset_changed {'number': 4, 'name': 'Chime 1: Class-A'}
+13:37:06 raw  45 f000010c22054d002100010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+13:37:09 raw  45 f000010c22054d002300010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+13:37:10 RESULT name 2A:24 dump: PASS - records at 1.0 in the amp block: ['2A:0/1e'] (expected 2A:0/1e)
+13:37:20 stopped with Ctrl-C
+13:37:20 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+13:37:20 PASS  connect: 14.2s, preset 'Jungle $lash', 127 preset names (115 left out)
+13:37:20 PASS  connect values: from the dump: {(116, 26, 3): 1.0, (116, 72, 3): 0, (116, 28, 3): 0.5, (116, 71, 3): 0, (116, 30, 3): 0.449, (116, 70, 3): 0, (116, 32, 3): 0.291, (116, 36, 3): 0.24, (42, 36, 0): 0.569, (42, 38, 0): 0.764, (42, 39, 0): 0.716}
+13:37:20 PASS  sliders 4 Chime 1: Class-A: 9 moves -> 9 sets [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] to (42, 37, 0); get('drive') = 0.9
+13:37:20 PASS  drive pick 4: "drive" went to 0x25 (expected 0x25)
+13:37:20 FAIL  sliders 4 by ear: you said 'n'
+13:37:20 PASS  sliders 8 Jungle $lash: 9 moves -> 9 sets [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] to (42, 38, 0); get('drive') = 0.9
+13:37:20 PASS  drive pick 8: "drive" went to 0x26 (expected 0x26)
+13:37:20 PASS  sliders 8 by ear: you said 'y'
+13:37:20 PASS  name 2A:24 dump: records at 1.0 in the amp block: ['2A:0/1e'] (expected 2A:0/1e)

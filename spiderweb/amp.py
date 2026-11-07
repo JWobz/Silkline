@@ -13,16 +13,20 @@ from spiderweb.protocol.dump import DumpCollector
 from spiderweb.protocol.messages import (
     DUMP_REQUEST,
     FIRST_SEQUENCE,
+    FLOAT_VALUE,
+    SWITCH_VALUE,
     SetAnswer,
+    UploadAnswer,
     build_begin_message,
     build_set_message,
     select_message,
 )
-from spiderweb.protocol.values import encode_set_value
+from spiderweb.protocol.upload import build_upload
 
 HANDSHAKE_PATH = Path(__file__).parent / "handshake.txt"
 
 SET_TIMEOUT = 1.0
+UPLOAD_TIMEOUT = 2.0  # seconds; the app's save was answered in about 0.1 s
 DUMP_TIMEOUT = 4.0  # seconds to wait for a dump
 
 def load_handshake(path=HANDSHAKE_PATH):
@@ -53,6 +57,7 @@ class Amp:
         self._logger = Logger(prefix="Amp")
         self._connection = connection
         self._seq = FIRST_SEQUENCE
+        self._upload_seq = 0x10 
         self._set_lock = threading.Lock()
 
     @property
@@ -70,14 +75,33 @@ class Amp:
         """
         replies = self._connection.open()
         self._seq = FIRST_SEQUENCE
+        self._upload_seq = 0x10
         return replies
 
     def close(self):
         """Stops the reader and closes the device. Safe to call more than once."""
         self._connection.close()
 
-    def set_raw(self, block, sub, param_id, raw5, unknown=1):
+    def upload(self, slot, data):
+        """Sends data to the amp as an upload and waits for its answer (protocol.md section 8, "Uploads").
+
+        slot is a preset number (a save) or upload.EDIT_BUFFER (the live preset, v1.1).
+        The header uses the upload counter and the pieces the next number, so it
+        moves on by 2; it's separate from the set counter. Pieces go 10 ms apart, as
+        the app sends them. Holds the set lock, so no set gets in between. Raises
+        AmpTimeout if the amp doesn't answer within UPLOAD_TIMEOUT, AmpDisconnected
+        if not connected.
+        """
+        with self._set_lock:
+            msgs = build_upload(self._upload_seq, slot, data)
+            self._upload_seq = (self._upload_seq + 2) % 128
+            self._connection.request(msgs, UploadAnswer(), UPLOAD_TIMEOUT, gap=0.01)
+
+    def set_raw(self, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1):
         """Sets a parameter to a raw five-byte value (protocol.md section 8).
+
+        block, sub, param_id and namespace say which parameter (see
+        build_set_message); the namespace can differ from sub.
 
         Sends a begin message and then a set message, numbered seq and seq + 1,
         and waits for the amp's answer (the value itself is never reported back).
@@ -89,7 +113,7 @@ class Amp:
         """    
         with self._set_lock:
             msgs = [build_begin_message(self._seq),
-                    build_set_message(self._seq+1, block, sub, param_id, raw5, unknown)]
+                    build_set_message(self._seq+1, block, sub, param_id, raw5, namespace, value_type, unknown)]
             self._seq = (self._seq + 2) % 128   
             self._connection.request(msgs, SetAnswer(), SET_TIMEOUT)
     
@@ -106,16 +130,15 @@ class Amp:
         return self.request_dump(timeout)
         
     def set_parameter(self, param, value):
-        """Sets a Parameter (from protocol.parameters) to a value from 0 to 1.
+        """Sets a Parameter (from protocol.parameters) to a value (see Parameter.encode).
 
         Returns once the amp has answered (see set_raw). Raises ValueError, and
         sends nothing, if the parameter can't be set or the value is out of range.
         """
         if not param.settable:
             raise ValueError(f"Parameter {param.name} is not settable.")
-        if not (0 <= value <= 1):
-            raise ValueError(f"Value must be between 0 and 1, got {value}")
-        self.set_raw(param.block, param.sub, param.id, encode_set_value(value))
+        raw5, value_type = param.encode(value)
+        self.set_raw(param.block, param.sub, param.id , raw5, param.namespace, value_type)
 
     def refresh_preset(self, on_done, timeout=DUMP_TIMEOUT):
         """Asks for the current preset's dump without waiting for it.

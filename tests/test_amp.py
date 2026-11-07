@@ -1,6 +1,6 @@
 """Tests for spiderweb/amp.py: amp operations on top of a real Connection.
 
-The amp itself is the FakeTransport from test_connection.py, so these check that
+The amp itself is the FakeTransport from helpers.py, so these check that
 Amp sends the right messages and that its replies come back through the connection.
 Like the real amp, the fake answers every set (protocol.md section 8) unless a test
 says otherwise.
@@ -22,39 +22,30 @@ from spiderweb.protocol.messages import (
 )
 from spiderweb.protocol.parameters import BY_NAME
 from spiderweb.protocol.values import encode_set_value
-from tests.test_connection import FakeTransport, Recorder, capture_messages, replies_to
-from tests.test_dump import preset_select_section
+from spiderweb.amp import UPLOAD_TIMEOUT
+from spiderweb.protocol.upload import build_upload
+from tests.helpers import (
+    SET_ANSWER,
+    UPLOAD_ANSWER,
+    AnswersUploads,
+    FakeTransport,
+    Recorder,
+    answers_sets,
+    bass_dump,
+    chime_dump,
+    is_set,
+    is_upload_header,
+    replies_to,
+)
 
 HELLO = b"\xf0hello\xf7"
 HELLO_REPLY = b"\xf0hello-reply\xf7"
 OTHER = b"\xf0other\xf7"
 FIRST_SEQ = 0x0C        # protocol.md section 2: our seq starts here after the handshake
-# The amp's answer to a set, from captures/set_pace.txt (protocol.md section 8).
-SET_ANSWER = bytes.fromhex("f000010c22054d000900000b00010000000400000000000000000000f7")
+FIRST_UPLOAD_SEQ = 0x10  # Amp.upload's channel-1 counter starts here
 
 DRIVE = BY_NAME["drive"]
 TAP_HOLD = BY_NAME["tap (hold)"]
-
-
-def is_set(msg):
-    """ A 37-byte set message (the second of a set's two messages). """
-    return len(msg) == 37 and msg[11] == 0x0F
-
-
-def answers_sets(other=None):
-    """ auto_reply for the fake: answers every set with SET_ANSWER, and anything else with `other`. """
-    other = other or (lambda msg: [])
-    return lambda msg: [SET_ANSWER] if is_set(msg) else other(msg)
-
-
-def chime_dump():
-    """ A real capture of the amp answering a dump request (dump chunks mixed with other messages). """
-    return capture_messages("chime_Drive.txt")
-
-
-def bass_dump():
-    """ What came back after selecting value 0 (Bass) from the Pi. """
-    return preset_select_section("preset_select_2.txt", 0)
 
 
 def sets_in(sent):
@@ -130,23 +121,44 @@ class TestSet(AmpTest):
     def test_set_raw_sends_begin_then_set(self):
         amp, fake = self.make()
         raw5 = bytes([1, 2, 3, 4, 5])
-        amp.set_raw(0x2A, 0, 0x25, raw5)
+        amp.set_raw(0x2A, 0, 0x25, raw5, 0)
         self.assertEqual(fake.sent, [
             build_begin_message(FIRST_SEQ),
-            build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x25, raw5, 1),
+            build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x25, raw5, 0, unknown=1),
         ])
 
     def test_set_raw_passes_unknown_through(self):
         amp, fake = self.make()
         raw5 = bytes(5)
-        amp.set_raw(0x2A, 0, 0x25, raw5, unknown=3)
-        self.assertEqual(fake.sent[1], build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x25, raw5, 3))
+        amp.set_raw(0x2A, 0, 0x25, raw5, 0, unknown=3)
+        self.assertEqual(fake.sent[1], build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x25, raw5, 0, unknown=3))
 
     def test_set_parameter_sends_the_encoded_value(self):
         amp, fake = self.make()
         amp.set_parameter(DRIVE, 0.5)
         self.assertEqual(fake.sent[1], build_set_message(
-            FIRST_SEQ + 1, DRIVE.block, DRIVE.sub, DRIVE.id, encode_set_value(0.5)))
+            FIRST_SEQ + 1, DRIVE.block, DRIVE.sub, DRIVE.id, encode_set_value(0.5), DRIVE.namespace))
+
+    def test_set_parameter_sends_sub_and_namespace_separately(self):
+        amp, fake = self.make()
+        mix = BY_NAME["reverb mix"]
+        amp.set_parameter(mix, 0.5)
+        self.assertEqual(fake.sent[1], build_set_message(
+            FIRST_SEQ + 1, 0x1F, 3, 0x7A, encode_set_value(0.5), 1))
+
+    def test_a_switch_is_sent_like_the_app_does(self):
+        amp, fake = self.make()
+        amp.set_parameter(BY_NAME["stomp on"], 1)
+        msg = fake.sent[1]
+        self.assertEqual((msg[13], msg[14], msg[17], msg[18]), (0x74, 3, 0x48, 3))
+        self.assertEqual(msg[22], 0x03)                      # 04 for floats
+        self.assertEqual(msg[26:31], bytes([1, 0, 0, 0, 0]))
+
+    def test_a_bad_switch_value_sends_nothing(self):
+        amp, fake = self.make()
+        with self.assertRaises(ValueError):
+            amp.set_parameter(BY_NAME["stomp on"], 0.5)
+        self.assertEqual(fake.sent, [])
 
     def test_seq_steps_by_two(self):
         amp, fake = self.make()
@@ -373,6 +385,82 @@ class TestPassThrough(AmpTest):
         amp.on_lost(lost)
         fake.arrive(OSError("unplugged"))
         self.assertTrue(lost.wait_for())
+
+
+
+class TestUpload(AmpTest):
+    """ Amp.upload: the messages of build_upload, its own channel-1 counter, and the
+    amp's one answer at the end (protocol.md section 8, "Uploads"). """
+
+    DATA = bytes(range(256)) * 5                      # 1280 bytes: 6 full pieces and one short
+
+    def make_uploads(self, **args):
+        self.uploads = AnswersUploads()
+        return self.make(auto_reply=self.uploads, **args)
+
+    def test_sends_the_header_and_the_pieces(self):
+        amp, fake = self.make_uploads()
+        amp.upload(4, self.DATA)
+        self.assertEqual(fake.sent, build_upload(FIRST_UPLOAD_SEQ, 4, self.DATA))
+        self.assertEqual(self.uploads.uploads, [(4, self.DATA)])
+
+    def test_the_counter_steps_by_two(self):
+        amp, fake = self.make_uploads()
+        for _ in range(3):
+            amp.upload(4, b"abc")
+        headers = [m[8] for m in fake.sent if is_upload_header(m)]
+        self.assertEqual(headers, [FIRST_UPLOAD_SEQ, FIRST_UPLOAD_SEQ + 2, FIRST_UPLOAD_SEQ + 4])
+
+    def test_the_counter_is_not_the_set_counter(self):
+        amp, fake = self.make_uploads()
+        amp.upload(4, b"abc")
+        amp.set_parameter(DRIVE, 0.5)
+        self.assertEqual(sets_in(fake.sent[2:]), [(FIRST_SEQ, FIRST_SEQ + 1)])
+
+    def test_the_counter_starts_again_after_reconnect(self):
+        amp, fake = self.make_uploads()
+        amp.upload(4, b"abc")
+        amp.close()
+        fake.sent.clear()
+        amp.connect()
+        amp.upload(4, b"abc")
+        self.assertEqual(fake.sent[0][8], FIRST_UPLOAD_SEQ)
+
+    def test_no_answer_times_out(self):
+        amp, fake = self.make_uploads()
+        self.uploads.answer = False
+        start = time.time()
+        with self.assertRaises(AmpTimeout):
+            amp.upload(4, b"abc")
+        self.assertLess(time.time() - start, UPLOAD_TIMEOUT + 2)
+
+    def test_the_answer_isnt_passed_to_listeners(self):
+        amp, fake = self.make_uploads()
+        heard = Recorder()
+        amp.add_listener(heard)
+        amp.upload(4, b"abc")
+        fake.arrive(OTHER)
+        self.assertTrue(heard.wait_for(1))
+        self.assertNotIn(UPLOAD_ANSWER, heard.calls)
+
+    def test_pieces_are_paced(self):
+        # The app leaves 6 to 16 ms between pieces; upload asks request() for a gap.
+        amp, fake = self.make_uploads()
+        times = []
+        inner = fake.auto_reply
+        def timed(msg):
+            times.append(time.monotonic())
+            return inner(msg)
+        fake.auto_reply = timed
+        amp.upload(4, self.DATA)
+        gaps = [b - a for a, b in zip(times, times[1:])]
+        self.assertEqual(len(gaps), 7)
+        self.assertGreaterEqual(min(gaps), 0.009)
+
+    def test_upload_before_connect_fails_fast(self):
+        amp, fake = self.make_uploads(connect=False)
+        with self.assertRaises(AmpDisconnected):
+            amp.upload(4, b"abc")
 
 
 if __name__ == "__main__":

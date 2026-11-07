@@ -8,12 +8,13 @@ Turn the amp's master volume down and keep your hands off its knobs while it run
 
 For each preset in PRESETS it:
   1. selects the preset and takes two dumps, to see which bytes change on their own
-  2. for each parameter in PARAMS: sets it to 0.5, takes a dump, sets it to 0.75,
+  2. for each parameter in PARAMS: sets it to 0.5, takes a dump, sets it to 0.75
+     (0 then 1 for an on/off; halfway then three quarters for other ranges),
      takes another dump
-  3. looks for the place in the dump that went from 0.5 to 0.75
+  3. looks for the record in the dump that went from 0.5 to 0.75
 
-Offsets are into the unpacked data of the five 309-byte chunks (protocol.md section 3:
-top bits most significant first). The amp stores a set value a little high (0.5 as
+Records are named block/id, e.g. "2A:0/1f" (the amp block's Drive), from the dump's
+layout in protocol.md section 3. The amp stores a set value a little high (0.5 as
 0.502), so values are matched within 0.005.
 
 Everything goes to captures/dump_params.txt (a new file each run): every dump as hex,
@@ -22,7 +23,12 @@ saved on the amp. Turn the preset knob afterwards to reload a clean preset.
 
 Other parameters: name them after the command, by name or as block:id:sub in hex
 (for ones not in parameters.py), for example
-    python3 -m tools.dump_params fx2 fx3 "fx knob (fx2)" 2a:27:0
+    python3 -m tools.dump_params "mod on" "delay on" "mod knob" 2a:27:0
+
+New mode, for every settable parameter that DUMP_RECORDS doesn't map yet, on the
+first two presets only (about 5 minutes):
+    python3 -m tools.dump_params new
+It sets each stage's on/off too, so stages switch on and off while it runs.
 
 Bits mode, to work out the 7-bit packing (protocol.md section 3):
     python3 -m tools.dump_params bits
@@ -39,7 +45,7 @@ from spiderweb.amp import Amp, load_handshake
 from spiderweb.connection import Connection
 from spiderweb.errors import AmpError
 from spiderweb.protocol.dump import DUMP_CHUNK_LENGTH
-from spiderweb.protocol.parameters import BY_NAME, Parameter
+from spiderweb.protocol.parameters import BY_NAME, DUMP_RECORDS, PARAMETERS, Parameter
 
 
 def unpack(msg):
@@ -53,7 +59,7 @@ def unpack(msg):
     return bytes(out)
 
 PRESETS = (4, 8, 0, 14)          # Chime 1: Class-A, Jungle $lash, Bass, Ambient 1: Black Hole
-DEFAULT_PARAMS = ("drive", "drive (alt)", "volume", "reverb", "reverb (mix)", "fx1", "fx knob (fx1)")
+DEFAULT_PARAMS = ("gain", "drive", "volume", "reverb", "reverb mix", "stomp on", "stomp knob")
 
 
 def parameter(spec):
@@ -63,14 +69,36 @@ def parameter(spec):
     parts = spec.split(":")
     if len(parts) == 3:
         block, param_id, sub = (int(p, 16) for p in parts)
-        return Parameter(spec.upper(), block, sub, param_id, settable=True)
-    raise SystemExit(f"unknown parameter {spec!r}: use a name from parameters.py or block:id:sub")
+        return Parameter(spec.upper(), block, sub, param_id, sub, settable=True)    # namespace = sub
+    raise SystemExit(f"unknown parameter {spec!r}: use a name from parameters.py or block:id:sub (the namespace is taken as sub)")
 
 
-ARGS = [a for a in sys.argv[1:] if a != "bits"]
-PARAMS = [parameter(a) for a in (ARGS or DEFAULT_PARAMS)]
+def not_mapped_yet():
+    """ Every settable parameter whose dump record isn't in DUMP_RECORDS yet ("new" mode). """
+    mapped = set(DUMP_RECORDS.values())
+    return [p for p in PARAMETERS if p.settable and p.key not in mapped]
+
+
+def test_values(param):
+    """ The two values to set, and how close the dump must be: 0 then 1 for a switch,
+    halfway then three quarters of the way through a float's range (0.5 and 0.75 for
+    0 to 1), and 0.5 then 1.0 in bits mode. """
+    if BITS:
+        return 0.5, 1.0, TOLERANCE
+    if param.kind == "switch":
+        return 0, 1, 0.5
+    span = param.high - param.low
+    return param.low + 0.5 * span, param.low + 0.75 * span, TOLERANCE * max(1.0, span)
+
+
+ARGS = [a for a in sys.argv[1:] if a not in ("bits", "new")]
+if "new" in sys.argv[1:]:
+    PARAMS = not_mapped_yet()
+    PRESETS = PRESETS[:2]        # Chime and Jungle $lash: enough to confirm, half the time
+else:
+    PARAMS = [parameter(a) for a in (ARGS or DEFAULT_PARAMS)]
 BITS = "bits" in sys.argv[1:]
-LOW, HIGH = (0.5, 1.0) if BITS else (0.5, 0.75)
+
 TOLERANCE = 0.005
 SETTLE = 0.5                     # seconds between a set and the dump that should show it
 
@@ -101,38 +129,42 @@ def raw_diffs(low_dump, high_dump):
 
 
 def dump_data(dump):
-    """ The unpacked data of a dump's full-size chunks, joined (5 x 259 bytes for a whole dump). """
+    """ The old 259-bytes-per-chunk view (5 x 259 bytes), whose offsets the archived
+    tools and protocol.md's offset table use. New code wants dump_stream(). """
     return b"".join(unpack(chunk) for chunk in dump.chunks if len(chunk) == DUMP_CHUNK_LENGTH)
 
 
-def changed(a, b):
-    """ Offsets where two dumps' data differ. """
-    return {i for i in range(min(len(a), len(b))) if a[i] != b[i]}
+def dump_stream(dump):
+    """ The dump's data as protocol.md section 3 lays it out: each full chunk unpacked,
+    its first 256 bytes kept (the last 3 are padding), joined. """
+    return b"".join(unpack(chunk)[:256] for chunk in dump.chunks if len(chunk) == DUMP_CHUNK_LENGTH)
 
 
-def ranges(offsets):
-    """ [3, 4, 5, 9] -> "3-5, 9" """
-    out, run = [], []
-    for o in sorted(offsets):
-        if run and o != run[-1] + 1:
-            out.append(run)
-            run = []
-        run.append(o)
-    if run:
-        out.append(run)
-    return ", ".join(f"{r[0]}-{r[-1]}" if len(r) > 1 else str(r[0]) for r in out) or "none"
+def records(dump):
+    """ Every parameter record in a dump, as {"BB:s/rr": (type, value)}, e.g. "2A:0/1f".
 
-
-def matches(low, high):
-    """ Offsets holding LOW in the first dump and HIGH in the second, as floats.
-
-    The amp stores a set value a little high (0.5 as 0.502, protocol.md section 3),
-    so they're compared with a tolerance.
+    Blocks are 3 info records (03 block, 05 kind, 06 count) and then `count` 10-byte
+    parameter records (protocol.md section 3). A block cut off by the end of the full
+    chunks keeps what it has.
     """
-    def near(data, o, value):
-        return abs(struct.unpack_from("<f", data, o)[0] - value) < TOLERANCE
-    return [o for o in range(min(len(low), len(high)) - 3)
-            if near(low, o, LOW) and near(high, o, HIGH)]
+    d, out, o = dump_stream(dump), {}, 0
+    while o + 30 <= len(d):
+        info = [d[o + 10 * i:o + 10 * i + 10] for i in range(3)]
+        if not all(r[0] == n and r[3] == 0x80 for r, n in zip(info, (3, 5, 6))):
+            o += 1
+            continue
+        block = int.from_bytes(info[0][6:10], "little")
+        count = int.from_bytes(info[2][6:10], "little")
+        o += 30
+        for _ in range(count):
+            r = d[o:o + 10]
+            if len(r) < 10 or r[4] not in (1, 2, 3):
+                break
+            raw = r[6:10]
+            value = struct.unpack("<f", raw)[0] if r[4] == 3 else int.from_bytes(raw, "little")
+            out[f"{block & 0xFF:02X}:{block >> 8:x}/{r[0]:02x}"] = (r[4], value)
+            o += 10
+    return out
 
 
 class DumpParams:
@@ -161,24 +193,27 @@ class DumpParams:
 
     def check_param(self, preset, param, noise):
         name = param.name.lower()        # the label used in the log
-        self.amp.set_parameter(param, LOW)
+        low, high, tolerance = test_values(param)
+        self.amp.set_parameter(param, low)
         time.sleep(SETTLE)
-        low_dump = self.take_dump(f"{preset} {name} {LOW}")
-        self.amp.set_parameter(param, HIGH)
+        low_dump = self.take_dump(f"{preset} {name} {low}")
+        self.amp.set_parameter(param, high)
         time.sleep(SETTLE)
-        high_dump = self.take_dump(f"{preset} {name} {HIGH}")
+        high_dump = self.take_dump(f"{preset} {name} {high}")
         if BITS:
             diffs = raw_diffs(low_dump, high_dump)
             self.write(f"  {param.name:14} raw diff: {'; '.join(diffs) if diffs else 'none'}")
-        low, high = dump_data(low_dump), dump_data(high_dump)
-        found = matches(low, high)
-        moved = changed(low, high) - noise
+        before, after = records(low_dump), records(high_dump)
+        wanted_type = (1, 2) if param.kind == "switch" else (3,)
+        found = [key for key, (typ, value) in after.items()
+                 if typ in wanted_type and key in before and abs(before[key][1] - low) < tolerance
+                 and abs(value - high) < tolerance]
+        moved = [key for key in after if before.get(key) != after[key]]
         if found:
-            records = ", ".join(f"{o} (6 bytes before: {low[o - 6:o].hex()})" for o in found)
-            self.write(f"  {param.name:14} FOUND at {records}")
+            self.write(f"  {param.name:14} FOUND as record {', '.join(found)}")
         else:
-            self.write(f"  {param.name:14} not found; bytes that changed: {ranges(moved)}")
-        self.summary.append((preset, param.name, found, ranges(moved)))
+            self.write(f"  {param.name:14} not found; records that changed: {', '.join(moved) or 'none'}")
+        self.summary.append((preset, param.name, found, ", ".join(moved) or "none"))
 
     def check_preset(self, value):
         try:
@@ -188,9 +223,9 @@ class DumpParams:
             return
         self.log_dump(f"{value} selected", dump)
         self.write(f"\npreset {value}: {dump.name()!r}")
-        first = dump_data(dump)
-        noise = changed(first, dump_data(self.take_dump(f"{value} again")))
-        self.write(f"  changed by themselves between two dumps: {ranges(noise)}")
+        first, again = records(dump), records(self.take_dump(f"{value} again"))
+        noise = [key for key in again if first.get(key) != again[key]]
+        self.write(f"  {len(first)} records; changed by themselves between two dumps: {', '.join(noise) or 'none'}")
         for param in PARAMS:
             try:
                 self.check_param(value, param, noise)
@@ -204,7 +239,7 @@ class DumpParams:
         self.amp.connect()
         for value in PRESETS:
             self.check_preset(value)
-        self.write("\n=== summary: offset of each parameter's value, per preset ===")
+        self.write("\n=== summary: the record holding each parameter's value, per preset ===")
         for preset, name, found, moved in self.summary:
             self.write(f"preset {preset:3} {name:14} {found if found else 'not found (changed: ' + moved + ')'}")
 

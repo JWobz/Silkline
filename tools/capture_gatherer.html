@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capture Gatherer</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #5d6676; --line: #d9dde4;
+    --accent: #2563eb; --accent-text: #ffffff; --done: #e8f5ec; --done-line: #3f9d5d; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171c; --card: #1d2128; --text: #e6e9ef; --muted: #9aa3b2; --line: #313844;
+      --accent: #5b8cff; --accent-text: #0d1117; --done: #17271d; --done-line: #4fb874; --warn: #f0a44b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 8px; }
+  p { margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .warn { color: var(--warn); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 10px 0; }
+  .step { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+  .step.done { background: var(--done); border-left-color: var(--done-line); }
+  .step h3 { font-size: 15px; margin: 0 0 4px; }
+  .step ol, .step ul { margin: 4px 0 8px; padding-left: 22px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  textarea { width: 100%; min-height: 54px; padding: 8px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
+  button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .stamp { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  .bar { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 10px 0; border-bottom: 1px solid var(--line); }
+  #clock { font-variant-numeric: tabular-nums; font-weight: 600; }
+  pre { white-space: pre-wrap; background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px; font-size: 12px; max-height: 260px; overflow: auto; }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <div class="row" style="margin:0; justify-content: space-between;">
+      <div><strong>Capture Gatherer</strong> <span class="muted">· clock</span> <span id="clock">--:--:--</span></div>
+      <div class="row" style="margin:0">
+        <button id="mark">Mark now</button>
+        <button id="download" class="primary">Download log</button>
+      </div>
+    </div>
+  </div>
+
+  <h1>Recording what the API still needs</h1>
+  <p class="muted">For SpiderWeb-Amp (docs/protocol.md). One Wireshark recording for the whole session;
+    this page notes the time of every step so the two can be lined up afterwards. Your notes are kept in
+    this browser if you reload, but download the log at the end.</p>
+
+  <div class="card">
+    <h3 style="margin:0 0 6px">Before you start</h3>
+    <ol>
+      <li>Amp plugged into the <strong>PC</strong> (not the Pi), Spider V Remote open and connected.</li>
+      <li>Wireshark open. Start recording on the amp's USBPcap interface (the one you used last time).</li>
+      <li>Leave about <strong>5 seconds between actions</strong>, and press <strong>Done</strong> on a step as
+        soon as you've finished it. The times matter more than tidy notes.</li>
+      <li>Nothing here is saved on the amp except step 7, which says so first.</li>
+    </ol>
+    <div class="row"><button class="primary" id="started">Wireshark is recording: mark the start</button>
+      <span class="stamp" id="startedStamp"></span></div>
+  </div>
+
+  <div id="steps"></div>
+
+  <h2>Finish</h2>
+  <div class="card">
+    <ol>
+      <li>Stop the Wireshark recording and <strong>File &gt; Save As</strong>
+        <code>captures\windows\session.pcapng</code> (in the SpiderWeb-Amp folder).</li>
+      <li>Press <strong>Download log</strong> (top right) and move the file into the same folder.</li>
+      <li>Unplug the amp from the PC and plug it back into the Pi.</li>
+    </ol>
+    <p class="muted">The log so far:</p>
+    <pre id="preview"></pre>
+    <div class="row"><button id="reset">Clear everything (start over)</button></div>
+  </div>
+</main>
+
+<script>
+const STEPS = [
+  { id: "chains", title: "1. Chains of different presets",
+    what: "Select each preset in the app. For each, write the stages in order (left to right, as the app shows them), which are off, and each stage's type.",
+    list: ["User 1", "Plateau of Leng", "Chime 1: Class-A", "Jungle $lash", "Ambient 1: Black Hole"],
+    perItem: true, hint: "e.g. Gate (off) · Wah: Fassel (off) · Stomp: Screamer · Synth: ... · Amp: Class A-30 · Comp · EQ (off) · Vol · Delay: Tube Echo · Reverb: Vintage Plate" },
+  { id: "pick", title: "2. Pick one preset to work on",
+    what: "Select Chime 1: Class-A and leave it selected for steps 3 to 6. (Anything you change is only in the amp's edit buffer until a save.)" },
+  { id: "onoff", title: "3. Every stage off, then on",
+    what: "For each stage: switch it off, wait 5 s, switch it on, wait 5 s, then press its Done.",
+    list: ["Gate", "Wah", "Stomp", "Synth / mod slot", "Amp", "Comp", "EQ", "Vol", "Delay", "Reverb", "Cab (if the app has a switch for it)"], perItem: true },
+  { id: "types", title: "4. Change each stage's type",
+    what: "For each stage that has types: change it to another type, wait 5 s, and write the old and new type names. Then (step 5) move that new type's knobs before going on to the next stage.",
+    list: ["Wah", "Stomp", "Synth / mod slot", "Amp", "Cab", "Delay", "Reverb"], perItem: true,
+    hint: "e.g. Screamer → Line 6 Distortion" },
+  { id: "knobs", title: "5. The new types' knobs",
+    what: "After each type change in step 4: drag each of that type's knobs up, then down (5 s apart), and write their names in order. One Done per stage.",
+    list: ["Wah", "Stomp", "Synth / mod slot", "Amp", "Cab", "Delay", "Reverb"], perItem: true,
+    hint: "e.g. Drive, Tone, Level" },
+  { id: "order", title: "6. Move a stage (if the app lets you)",
+    what: "If stages can be dragged to another place in the chain, move Delay before the Amp, wait 5 s, then move it back. If the app doesn't allow it, write 'not possible'." },
+  { id: "saveas", title: "7. Save as another slot (writes to the amp!)",
+    warn: "This overwrites the chosen user slot on the amp. Use User 4, and only if you don't need what's in it.",
+    what: "Use the app's save-as (or save to a different slot) to store the current edited preset in User 4, named PiTest if it asks. Write exactly what you clicked. Then select User 4 and check it says PiTest." },
+  { id: "restore", title: "8. Put Chime 1 back",
+    what: "Select Chime 1: Class-A again. If the app can restore factory presets, use it for Chime 1 (it was saved over last time); otherwise just turn its Volume to where you like it and save. Write what you did." },
+];
+
+const STORE = "spiderweb-capture-gatherer-v1";
+let state = { started: null, log: [], notes: {}, done: {} };
+try { const saved = JSON.parse(localStorage.getItem(STORE) || "null"); if (saved) state = saved; } catch (e) {}
+
+function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {} preview(); }
+function clock(d = new Date()) {
+  const p = (n, w = 2) => String(n).padStart(w, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+function log(event, note = "") {
+  const entry = { time: clock(), epoch: Date.now() / 1000, event, note };
+  state.log.push(entry); save(); return entry;
+}
+
+function stepCard(step) {
+  const div = document.createElement("div");
+  div.className = "step";
+  const items = step.list && step.perItem ? step.list : [null];
+  div.innerHTML = `<h3>${step.title}</h3>
+    ${step.warn ? `<p class="warn"><strong>${step.warn}</strong></p>` : ""}
+    <p>${step.what}</p>${step.hint ? `<p class="muted">${step.hint}</p>` : ""}`;
+  for (const item of items) {
+    const key = item ? `${step.id}:${item}` : step.id;
+    const box = document.createElement("div");
+    box.className = "card"; box.style.margin = "8px 0 0";
+    box.innerHTML = `${item ? `<strong>${item}</strong>` : ""}
+      <textarea placeholder="What you did / saw"></textarea>
+      <div class="row"><button class="primary">Done</button><span class="stamp"></span></div>`;
+    const ta = box.querySelector("textarea"), btn = box.querySelector("button"), stamp = box.querySelector(".stamp");
+    ta.value = state.notes[key] || "";
+    ta.addEventListener("input", () => { state.notes[key] = ta.value; save(); });
+    const show = () => {
+      const d = state.done[key];
+      stamp.textContent = d ? `done at ${d}` : "";
+      box.style.borderColor = d ? "var(--done-line)" : "";
+      const all = items.every(i => state.done[i ? `${step.id}:${i}` : step.id]);
+      div.classList.toggle("done", all);
+    };
+    btn.addEventListener("click", () => {
+      const e = log(`done ${key}`, ta.value.trim());
+      state.done[key] = e.time; save(); show();
+    });
+    show();
+    div.appendChild(box);
+  }
+  return div;
+}
+
+function text() {
+  const lines = ["# SpiderWeb-Amp capture gatherer log", "# clock (PC local time)  epoch  event  | note", ""];
+  if (state.started) lines.push(`${state.started.time}  ${state.started.epoch.toFixed(3)}  recording started`);
+  for (const e of state.log) lines.push(`${e.time}  ${e.epoch.toFixed(3)}  ${e.event}${e.note ? "  | " + e.note.replace(/\n/g, " / ") : ""}`);
+  lines.push("", "# notes per step");
+  for (const [k, v] of Object.entries(state.notes)) if (v.trim()) lines.push(`${k}: ${v.replace(/\n/g, " / ")}`);
+  return lines.join("\n") + "\n";
+}
+function preview() { document.getElementById("preview").textContent = text(); }
+
+document.getElementById("steps").append(...STEPS.map(stepCard));
+document.getElementById("started").addEventListener("click", () => {
+  state.started = { time: clock(), epoch: Date.now() / 1000 }; save();
+  document.getElementById("startedStamp").textContent = `marked at ${state.started.time}`;
+});
+if (state.started) document.getElementById("startedStamp").textContent = `marked at ${state.started.time}`;
+document.getElementById("mark").addEventListener("click", () => {
+  const note = prompt("What just happened? (optional)") || "";
+  log("mark", note);
+});
+document.getElementById("download").addEventListener("click", () => {
+  const blob = new Blob([text()], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "session_log.txt"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+document.getElementById("reset").addEventListener("click", () => {
+  if (confirm("Clear all notes and times?")) { state = { started: null, log: [], notes: {}, done: {} }; save(); location.reload(); }
+});
+setInterval(() => { document.getElementById("clock").textContent = clock().slice(0, 8); }, 250);
+preview();
+</script>
+</body>
+</html>

@@ -114,7 +114,13 @@ class Connection:
             self._handle_lost(e)
             raise AmpDisconnected(str(e)) from e
 
-    def request(self, msgs, collector, timeout):
+    def request(self, msgs, collector, timeout, gap=0):
+        """Sends msgs and waits until collector is complete (it is offered every message that arrives).
+
+        gap is a pause in seconds between messages (uploads use 0.01, as the app does).
+        Returns the collector. Raises AmpTimeout if it isn't complete within timeout,
+        AmpError from the reader thread (use request_async there).
+        """
         if threading.current_thread() is self._thread:
             raise AmpError("request() can't be called from the reader thread; use request_async()")
         self._request_lock.acquire()
@@ -122,7 +128,9 @@ class Connection:
         with self._pending_lock:
             note = Pending(collector, time.time() + timeout, lambda c: bell.set())
             self._pending = note
-        for msg in msgs:
+        for i, msg in enumerate(msgs):
+            if i and gap:
+                time.sleep(gap)
             try:
                 self.send(msg)
             except Exception:

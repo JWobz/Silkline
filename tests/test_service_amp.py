@@ -1,9 +1,10 @@
 """Phase 4 tests: AmpService on top of a real Amp and Connection.
 
-The amp is the FakeTransport from test_connection.py, answering with real
+The amp is the FakeTransport from helpers.py, answering with real
 captures. handle_message itself is tested in test_service_handler.py.
 """
 import threading
+import time
 import unittest
 
 from spiderweb.amp import Amp
@@ -18,41 +19,31 @@ from spiderweb.protocol.messages import (
     select_message,
 )
 from spiderweb.protocol.parameters import BY_NAME
-from spiderweb.protocol.values import encode_set_value
+from spiderweb.protocol.values import decode_set_value, encode_set_value
+from spiderweb.protocol.dump import DumpCollector, preset_data
 from spiderweb.service import AmpService, ConnectionState, EventType
-from tests.test_connection import FakeTransport, capture_messages
-from tests.test_amp import SET_ANSWER, is_set
-from tests.test_dump import preset_select_section
-from tests.test_presets import ACOUSTIC, BASS_LONG, LONG_0, SHORT_0, SHORT_5, USER_1
+from tests.helpers import (
+    ACOUSTIC,
+    BASS_LONG,
+    GAIN_REPORT,
+    LONG_0,
+    SET_ANSWER,
+    AnswersUploads,
+    SHORT_0,
+    SHORT_5,
+    TAP,
+    USER_1,
+    Events,
+    FakeTransport,
+    bass_dump,
+    chime_dump,
+    first_click,
+    is_set,
+    is_upload_header,
+)
 
-TAP = bytes.fromhex("f000010c22054d003f00000f0005000000080000020004000000767a401d420000000000f7")       # 157 bpm
-DRIVE_REPORT = bytes.fromhex(
-    "f000010c22054d0008000107000400000010000000002a0000002500010000040000007f407e7e3f00000000f7")   # Drive, about 0.99
+GAIN = BY_NAME["gain"]
 DRIVE = BY_NAME["drive"]
-
-
-def chime_dump():
-    """ A real dump of Chime 1: Class-A, mixed with other messages. """
-    return capture_messages("chime_Drive.txt")
-
-
-def bass_dump():
-    """ What came back after selecting value 0 (Bass) from the Pi. """
-    return preset_select_section("preset_select_2.txt", 0)
-
-
-def first_click():
-    """ One preset-knob click from preset_clicks.txt: its preset-change messages, up to the status message. """
-    messages, seen_change = [], False
-    for msg in capture_messages("preset_clicks.txt"):
-        kind = classify(msg)[0]
-        if kind == MessageKind.PRESET_CHANGE:
-            seen_change = True
-        if seen_change:
-            messages.append(msg)
-            if kind == MessageKind.STATUS:
-                return messages
-    raise AssertionError("no click found in preset_clicks.txt")
 
 
 def a_preset_list_message():
@@ -61,29 +52,6 @@ def a_preset_list_message():
         if classify(msg)[0] == MessageKind.PRESET_INFO:
             return msg
     raise AssertionError("no preset-list message in the capture")
-
-
-class Events:
-    """ A thread-safe on_change callback that keeps every event and can wait for one. """
-    def __init__(self):
-        self.events = []
-        self._arrived = threading.Condition()
-
-    def __call__(self, event):
-        with self._arrived:
-            self.events.append(event)
-            self._arrived.notify_all()
-
-    def of(self, event_type):
-        with self._arrived:
-            return [e for e in self.events if e.event_type == event_type]
-
-    def wait_for(self, check, timeout=2.0):
-        with self._arrived:
-            return self._arrived.wait_for(lambda: any(check(e) for e in self.events), timeout)
-
-    def connection_states(self):
-        return [e.data["state"] for e in self.of(EventType.CONNECTION_CHANGED)]
 
 
 class AnswersDumps:
@@ -207,6 +175,13 @@ class TestStartStop(ServiceTest):
         self.assertEqual(events.events, [])
 
 
+def request_for(index):
+    """ A short-list preset-list request for `index` (SHORT_5 with msg[22] changed, protocol.md section 4). """
+    msg = bytearray(SHORT_5)
+    msg[22] = index
+    return bytes(msg)
+
+
 class TestPresets(ServiceTest):
     # Short index 0 gets no reply (as on the real amp), so its name comes from the long list.
     PRESET_LIST = {SHORT_0: [], LONG_0: [BASS_LONG], SHORT_5: [TAP, ACOUSTIC]}
@@ -241,6 +216,11 @@ class TestPresets(ServiceTest):
         service.presets().clear()
         self.assertEqual(service.presets(), {0: "Bass", 5: "Acoustic"})
 
+    def test_preset_115_is_left_out(self):
+        # The amp lists 115 ("DirtyAcoBlues") but never loads it (protocol.md section 8).
+        service, fake, events = self.make(preset_list={**self.PRESET_LIST, request_for(115): [USER_1]})
+        self.assertEqual(service.presets(), {0: "Bass", 5: "Acoustic"})
+
     def test_preset_list_entries_after_start_are_ignored(self):
         service, fake, events = self.make(preset_list=self.PRESET_LIST)
         fake.arrive(USER_1)
@@ -263,7 +243,7 @@ class TestSetGet(ServiceTest):
         service.set("drive", 0.5)
         self.assertEqual(fake.sent, [
             build_begin_message(0x0C),
-            build_set_message(0x0D, DRIVE.block, DRIVE.sub, DRIVE.id, encode_set_value(0.5)),
+            build_set_message(0x0D, DRIVE.block, DRIVE.sub, DRIVE.id, encode_set_value(0.5), DRIVE.namespace),
         ])
 
     def test_names_are_not_case_sensitive(self):
@@ -296,11 +276,11 @@ class TestSetGet(ServiceTest):
 
     def test_a_knob_report_after_a_set_still_counts(self):
         service, fake, events = self.make()
-        service.set("drive", 0.5)
-        fake.arrive(DRIVE_REPORT)                      # the Drive knob turned to about 0.99
+        service.set("gain", 0.5)
+        fake.arrive(GAIN_REPORT)                       # the Gain knob turned to about 0.99
         self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PARAMETER_CHANGED
                                         and e.data["value"] > 0.9))
-        self.assertAlmostEqual(service.get("drive"), 0.99, places=2)
+        self.assertAlmostEqual(service.get("gain"), 0.99, places=2)
 
     def test_unknown_name_is_refused(self):
         service, fake, events = self.make()
@@ -321,6 +301,22 @@ class TestSetGet(ServiceTest):
         with self.assertRaises(ValueError):
             service.set("drive", 1.5)
         self.assertEqual(fake.sent, [])
+
+    def test_each_parameter_has_its_own_range(self):
+        service, fake, events = self.make()
+        service.set("gate threshold", 50)
+        self.assertEqual(service.get("gate threshold"), 50)
+        with self.assertRaises(ValueError):
+            service.set("gate threshold", 0.5)
+
+    def test_a_switch_takes_0_or_1(self):
+        service, fake, events = self.make()
+        service.set("stomp on", 1)
+        self.assertEqual(service.get("stomp on"), 1)
+        sent = len(fake.sent)
+        with self.assertRaises(ValueError):
+            service.set("stomp on", 0.5)
+        self.assertEqual(len(fake.sent), sent)
 
     def test_set_before_start_fails_fast(self):
         service, fake, events = self.make(start=False)
@@ -363,6 +359,23 @@ class TestSelectPreset(ServiceTest):
         with self.assertRaises(AmpDisconnected):
             service.select_preset(0)
 
+    def test_preset_115_is_refused_at_once(self):
+        # Without the check it would wait 4 s for a dump that never comes.
+        service, fake, events = self.make(dump=bass_dump())
+        start = time.time()
+        with self.assertRaises(ValueError):
+            service.select_preset(115)
+        self.assertLess(time.time() - start, 0.5)
+        self.assertEqual(fake.sent, [])
+
+    def test_out_of_range_is_refused_and_sends_nothing(self):
+        service, fake, events = self.make(dump=bass_dump())
+        for n in (-1, 128):
+            with self.assertRaises(ValueError):
+                service.select_preset(n)
+        self.assertEqual(fake.sent, [])
+        self.assertEqual(events.of(EventType.PRESET_CHANGED), [])
+
 
 class TestKnobRefresh(ServiceTest):
     def test_a_knob_click_refreshes_the_name(self):
@@ -400,6 +413,269 @@ class TestKnobRefresh(ServiceTest):
         self.sync()
         self.assertEqual(service.state().preset_name, "Chime 1: Class-A")
         self.assertEqual(events.of(EventType.PRESET_CHANGED), [])
+
+
+class TestValuesFromDumps(ServiceTest):
+    """ start(), select_preset() and the knob refresh read parameter values from the dump
+    they get (protocol.md section 3). Values from test_dump_values.py. """
+
+    def test_start_reads_the_handshake_dump(self):
+        service, fake, events = self.make(handshake_dump=chime_dump())
+        self.assertAlmostEqual(service.get("drive"), 0.9004, places=3)
+        self.assertAlmostEqual(service.get("volume"), 0.5922, places=3)
+        self.assertEqual(service.get("stomp on"), 0)
+
+    def test_values_from_the_handshake_are_not_events(self):
+        service, fake, events = self.make(handshake_dump=chime_dump())
+        self.assertEqual(events.of(EventType.PARAMETER_CHANGED), [])
+
+    def test_no_dump_means_no_values(self):
+        service, fake, events = self.make()
+        self.assertIsNone(service.get("drive"))
+        self.assertEqual(service.state().params, {})
+
+    def test_select_replaces_the_values(self):
+        # The old preset's values belong to the old preset: Bass has Drive, not Gain.
+        service, fake, events = self.make(handshake_dump=chime_dump(), dump=bass_dump())
+        service.select_preset(0)
+        self.assertAlmostEqual(service.get("drive"), 0.6226, places=3)
+        self.assertAlmostEqual(service.get("volume"), 0.7022, places=3)
+        self.assertNotIn(GAIN.key, service.state().params)        # Chime's Gain is gone
+
+    def test_a_knob_refresh_reads_the_new_dump(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), dump=bass_dump())
+        fake.arrive(*first_click())
+        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PRESET_CHANGED))
+        self.assertAlmostEqual(service.get("drive"), 0.6226, places=3)
+        self.assertNotIn(GAIN.key, service.state().params)
+
+    def test_a_set_still_overrides(self):
+        service, fake, events = self.make(handshake_dump=chime_dump())
+        service.set("volume", 0.25)
+        self.assertEqual(service.get("volume"), 0.25)
+
+
+def sent_param_id(fake):
+    """ The parameter id of the last set the fake was sent (msg[17], protocol.md section 8). """
+    return [msg for msg in fake.sent if is_set(msg)][-1][17]
+
+
+def drive_report():
+    """ GAIN_REPORT with the id changed to Drive, 0x26 (id at msg[26]). """
+    msg = bytearray(GAIN_REPORT)
+    msg[26] = 0x26
+    return bytes(msg)
+
+
+class TestDrivePick(ServiceTest):
+    """ "gain" and "drive" both mean whichever of the two the current preset has: Gain
+    (0x25) on Chime, Drive (0x26) on Bass (protocol.md section 3, point 5). The dump says
+    which; with no dump, the one asked for is sent. """
+
+    def test_chime_gets_0x25(self):
+        service, fake, events = self.make(handshake_dump=chime_dump())
+        service.set("drive", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x25)
+
+    def test_bass_gets_0x26(self):
+        service, fake, events = self.make(handshake_dump=bass_dump())
+        service.set("drive", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x26)
+        self.assertEqual(service.get("drive"), 0.5)
+        self.assertNotIn(GAIN.key, service.state().params)
+
+    def test_gain_on_bass_is_sent_as_drive(self):
+        service, fake, events = self.make(handshake_dump=bass_dump())
+        service.set("gain", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x26)
+
+    def test_gain_on_chime_is_sent_as_gain(self):
+        service, fake, events = self.make(handshake_dump=chime_dump())
+        service.set("gain", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x25)
+
+    def test_no_dump_sends_drive_as_asked(self):
+        service, fake, events = self.make()
+        service.set("drive", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x26)
+
+    def test_no_dump_sends_gain_as_asked(self):
+        service, fake, events = self.make()
+        service.set("gain", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x25)
+
+    def test_after_a_set_the_pick_follows_it(self):
+        # With no dump, the one set first is the one params has, so the other follows it.
+        service, fake, events = self.make()
+        service.set("drive", 0.5)
+        service.set("gain", 0.6)
+        self.assertEqual(sent_param_id(fake), 0x26)
+
+    def test_get_gain_reads_the_one_the_preset_has(self):
+        service, fake, events = self.make(handshake_dump=bass_dump())
+        self.assertAlmostEqual(service.get("gain"), 0.6226, places=3)
+
+    def test_get_drive_reads_the_drive_the_preset_has(self):
+        service, fake, events = self.make(handshake_dump=bass_dump())
+        self.assertAlmostEqual(service.get("drive"), 0.6226, places=3)     # Bass's Drive
+
+    def test_get_drive_after_a_set(self):
+        service, fake, events = self.make(handshake_dump=bass_dump())
+        service.set("drive", 0.3)
+        self.assertEqual(service.get("drive"), 0.3)
+
+    def test_get_drive_follows_a_knob_report(self):
+        service, fake, events = self.make(handshake_dump=bass_dump())
+        fake.arrive(drive_report())
+        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PARAMETER_CHANGED))
+        self.assertAlmostEqual(service.get("drive"), 0.99, places=2)
+
+    def test_the_pick_follows_a_select(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), dump=bass_dump())
+        service.set("drive", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x25)
+        service.select_preset(0)
+        service.set("drive", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x26)
+
+    def test_the_event_names_the_drive_that_was_set(self):
+        service, fake, events = self.make(handshake_dump=bass_dump())
+        service.set("drive", 0.5)
+        change = events.of(EventType.PARAMETER_CHANGED)[-1].data
+        self.assertEqual(change["key"], (0x2A, 0x26, 0))
+        self.assertEqual(change["name"], "Drive")
+
+
+def sets_sent(fake):
+    """ (param id, value) of every set the fake was sent, in order (msg[17] and msg[26:31]). """
+    return [(msg[17], round(decode_set_value(msg[26:31]), 2)) for msg in fake.sent if is_set(msg)]
+
+
+class TestSetLatest(ServiceTest):
+    """ set_latest() for sliders: the newest value per parameter wins, and only the caller
+    already sending waits. The fake answers each set after 0.2 s, so a burst piles up. """
+
+    VOLUME, REVERB, FX_KNOB = 0x24, 0x20, 0x1A
+
+    def make_slow(self, delay=0.2, **args):
+        service, fake, events = self.make(**args)
+        answers = self.replies
+
+        def slow(msg):
+            if is_set(msg):
+                if answers.answer_sets:
+                    timer = threading.Timer(delay, fake.arrive, args=[SET_ANSWER])
+                    timer.daemon = True            # a late answer mustn't hold up the test run
+                    timer.start()
+                return []
+            return answers(msg)
+        fake.auto_reply = slow
+        return service, fake, events
+
+    def first_in_background(self, service, name, value):
+        """ Starts a set_latest on another thread (it becomes the sender) and waits until it's sent. """
+        t = threading.Thread(target=service.set_latest, args=(name, value))
+        t.start()
+        deadline = time.time() + 2
+        while not sets_sent(self.fake) and time.time() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(sets_sent(self.fake), "the first set was never sent")
+        return t
+
+    def test_stop_while_sending_drops_the_rest_quietly(self):
+        # stop() sets _amp to None while the sender still has values waiting; _send
+        # must see that as AmpDisconnected (which _drain handles), not AttributeError.
+        service, fake, events = self.make_slow()
+        errors = []
+        old_hook = threading.excepthook
+        threading.excepthook = lambda args: errors.append(args.exc_type)
+        try:
+            sender = self.first_in_background(service, "volume", 0.1)
+            service.set_latest("reverb", 0.3)
+            service.stop()
+            sender.join(timeout=3)
+        finally:
+            threading.excepthook = old_hook
+        self.assertFalse(sender.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual([pid for pid, _ in sets_sent(fake)], [self.VOLUME])   # reverb never sent
+
+    def test_the_newest_value_wins(self):
+        service, fake, events = self.make_slow()
+        sender = self.first_in_background(service, "volume", 0.1)
+        for value in (0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9):
+            service.set_latest("volume", value)
+        sender.join(timeout=3)
+        self.assertEqual(sets_sent(fake), [(self.VOLUME, 0.1), (self.VOLUME, 0.9)])
+        self.assertEqual(service.get("volume"), 0.9)
+
+    def test_only_the_sender_waits(self):
+        service, fake, events = self.make_slow()
+        sender = self.first_in_background(service, "volume", 0.1)
+        start = time.time()
+        service.set_latest("volume", 0.5)
+        self.assertLess(time.time() - start, 0.05)
+        sender.join(timeout=3)
+
+    def test_two_parameters_in_one_burst(self):
+        service, fake, events = self.make_slow()
+        sender = self.first_in_background(service, "volume", 0.1)
+        service.set_latest("reverb", 0.3)
+        service.set_latest("volume", 0.8)
+        sender.join(timeout=3)
+        self.assertEqual(sorted(sets_sent(fake)), sorted([(self.VOLUME, 0.1), (self.REVERB, 0.3), (self.VOLUME, 0.8)]))
+        self.assertEqual((service.get("volume"), service.get("reverb")), (0.8, 0.3))
+
+    def test_the_longest_waiting_goes_first(self):
+        service, fake, events = self.make_slow()
+        sender = self.first_in_background(service, "volume", 0.1)
+        service.set_latest("reverb", 0.3)
+        service.set_latest("stomp knob", 0.4)
+        sender.join(timeout=3)
+        self.assertEqual([pid for pid, _ in sets_sent(fake)], [self.VOLUME, self.REVERB, self.FX_KNOB])
+
+    def test_each_value_sends_parameter_changed(self):
+        service, fake, events = self.make_slow()
+        sender = self.first_in_background(service, "volume", 0.1)
+        service.set_latest("volume", 0.7)
+        sender.join(timeout=3)
+        self.assertEqual([e.data["value"] for e in events.of(EventType.PARAMETER_CHANGED)], [0.1, 0.7])
+
+    def test_bad_names_and_values_are_refused_up_front(self):
+        service, fake, events = self.make()
+        for name, value in (("wah", 0.5), ("volume", 1.5), ("tap (hold)", 0.5)):
+            with self.assertRaises(ValueError):
+                service.set_latest(name, value)
+        self.assertEqual(sets_sent(fake), [])
+
+    def test_not_connected_is_refused_up_front(self):
+        service, fake, events = self.make(start=False)
+        with self.assertRaises(AmpDisconnected):
+            service.set_latest("volume", 0.5)
+
+    def test_a_timeout_doesnt_jam_it(self):
+        # The error can't reach a caller that has already returned, so it's logged instead.
+        service, fake, events = self.make()
+        self.replies.answer_sets = False
+        service.set_latest("volume", 0.5)              # times out inside, doesn't raise
+        self.replies.answer_sets = True
+        service.set_latest("volume", 0.6)
+        self.assertEqual(service.get("volume"), 0.6)
+
+    def test_an_unplug_drops_the_rest(self):
+        service, fake, events = self.make_slow(delay=5)       # the first set is never answered in time
+        sender = self.first_in_background(service, "volume", 0.1)
+        service.set_latest("reverb", 0.3)
+        fake.arrive(OSError(19, "No such device"))
+        sender.join(timeout=3)
+        self.assertFalse(sender.is_alive())
+        self.assertEqual([pid for pid, _ in sets_sent(fake)], [self.VOLUME])   # reverb never sent
+        self.assertIsNone(service.get("reverb"))
+
+    def test_drive_is_picked_for_the_preset(self):
+        service, fake, events = self.make(handshake_dump=bass_dump())
+        service.set_latest("drive", 0.5)
+        self.assertEqual(sent_param_id(fake), 0x26)
 
 
 class TestLost(ServiceTest):
@@ -444,6 +720,80 @@ class TestLost(ServiceTest):
         service.stop()
         service.start()
         self.assertEqual(service.state().connection, ConnectionState.CONNECTED)
+
+
+
+class TestSave(ServiceTest):
+    """ save(): a fresh dump, uploaded to the loaded slot, read back, PRESET_SAVED
+    (protocol.md section 8, "Save command"). The fake answers uploads like the amp. """
+
+    def make_save(self, **args):
+        service, fake, events = self.make(**args)
+        self.uploads = AnswersUploads(other=self.replies)
+        fake.auto_reply = self.uploads
+        return service, fake, events
+
+    def loaded(self):
+        """ A service with Bass selected (slot 0), so the slot is known. """
+        service, fake, events = self.make_save(handshake_dump=chime_dump(), dump=bass_dump())
+        service.select_preset(0)
+        fake.sent.clear()
+        return service, fake, events
+
+    def test_uploads_the_dumps_preset_to_the_loaded_slot(self):
+        service, fake, events = self.loaded()
+        service.save()
+        self.assertEqual(self.uploads.uploads, [(0, preset_data(collected(bass_dump())))])
+
+    def test_asks_for_a_dump_first_and_reads_it_back_after(self):
+        service, fake, events = self.loaded()
+        service.save()
+        self.assertEqual(fake.sent[0], DUMP_REQUEST)
+        self.assertTrue(is_upload_header(fake.sent[1]))
+        self.assertEqual(fake.sent[-1], DUMP_REQUEST)
+
+    def test_returns_the_name_and_sends_preset_saved(self):
+        service, fake, events = self.loaded()
+        self.assertEqual(service.save(), "Bass")
+        self.assertEqual(events.of(EventType.PRESET_SAVED)[-1].data, {"number": 0, "name": "Bass"})
+
+    def test_refuses_when_the_slot_isnt_known(self):
+        # After the handshake (or a knob move) preset_number is None: saving could
+        # overwrite the wrong preset, so nothing is sent.
+        service, fake, events = self.make_save(handshake_dump=chime_dump(), dump=chime_dump())
+        with self.assertRaises(ValueError):
+            service.save()
+        self.assertEqual(fake.sent, [])
+
+    def test_not_connected(self):
+        service, fake, events = self.make_save(start=False)
+        with self.assertRaises(AmpDisconnected):
+            service.save()
+
+    def test_an_unanswered_upload_raises_and_sends_no_event(self):
+        service, fake, events = self.loaded()
+        self.uploads.answer = False
+        with self.assertRaises(AmpTimeout):
+            service.save()
+        self.assertEqual(events.of(EventType.PRESET_SAVED), [])
+
+    def test_a_set_before_saving_is_in_the_saved_dump(self):
+        # save() uploads what the amp says it has, so a set is included because the
+        # amp's dump includes it (here the fake's dump is fixed, so only the order shows).
+        service, fake, events = self.loaded()
+        service.set("volume", 0.3)
+        fake.sent.clear()
+        service.save()
+        self.assertEqual(fake.sent[0], DUMP_REQUEST)
+
+
+def collected(messages):
+    """ A complete DumpCollector from a dump's messages. """
+    collector = DumpCollector()
+    for msg in messages:
+        collector.offer(msg)
+    assert collector.complete()
+    return collector
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ def main():
     logger = Logger(prefix="send")
 
     if len(sys.argv) != 3:
-        print("Usage: python3 -m tools.send <parameter> <value 0-1>")
+        print("Usage: python3 -m tools.send <parameter> <value>   (0 / 1 for an on/off)")
         sys.exit(1)
 
     param, value = sys.argv[1], float(sys.argv[2])

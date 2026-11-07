@@ -29,7 +29,7 @@ from spiderweb.errors import AmpError
 from spiderweb.protocol.messages import MessageKind, classify
 from spiderweb.service import AmpService, ConnectionState, EventType
 
-DRIVE_KEYS = {(0x2A, 0x25, 0), (0x2A, 0x26, 0)}    # Drive and Drive (alt)
+DRIVE_KEYS = {(0x2A, 0x25, 0), (0x2A, 0x26, 0)}    # Gain and Drive
 WAIT_KNOB = 30.0       # seconds to wait for a knob click
 WAIT_UNPLUG = 30.0     # seconds to wait for the unplug to be noticed
 HIGH_VALUES = (21, 60, 114, 115, 124, 127)   # past the 0-20 tried so far; 115-127 only in the short list
@@ -144,7 +144,7 @@ class Checker:
         for value in (0.2, 0.8):
             # Both Drive ids: each preset uses one, and the other is harmless (protocol.md
             # section 8). set() waits for the amp's answer, so this also checks the pacing.
-            for name in ("drive", "drive (alt)"):
+            for name in ("gain", "drive"):
                 since = time.time()
                 try:
                     self.service.set(name, value)

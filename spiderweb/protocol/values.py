@@ -2,14 +2,22 @@ import struct
 
 
 def encode_set_value(value):
-    """Turn a float into the five bytes the amp expects in a set message."""
-    if not (0 <= value <= 1):
-        raise ValueError(f"Value must be between 0 and 1, got {value}")
+    """Turn a float into the five bytes the amp expects in a set message.
+
+    Only the float's top 16 bits are sent. Values above 1 are fine (the gate threshold
+    is sent as 14 to 77); negative values are refused, because the sign bit would
+    land in the top byte, above 0x7F.
+    """
+    if value < 0:
+        raise ValueError(f"Value must not be negative, got {value}")
     float_bytes = struct.pack("<f", value)
     third, top = float_bytes[2], float_bytes[3]
     flag = 0x40 if (third & 0x80) else 0x00
     return bytes([0x00, 0x00, flag, third & 0x7F, top])
 
+def encode_switch(on):
+    """The five value bytes of an on/off set: 01 for on, 00 for off, then zeros."""
+    return bytes([1 if on else 0, 0, 0, 0, 0])
 
 def decode_value(value):
     """Turn the five byte value into a float."""

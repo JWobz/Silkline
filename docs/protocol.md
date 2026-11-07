@@ -107,16 +107,127 @@ knobs are left alone.
     `encode_set_value`.
   - The earlier attempts failed because they assumed 0.5 is stored as `00 00 00 3f`.
     It isn't (next point).
-- **A value is a 4-byte little-endian float**, after a 6-byte record header that starts
-  with a record id. **The amp fills in the low bytes:** 0.5 is stored as `00 80 00 3f`
+- **The amp fills in the low bytes of a set value:** 0.5 is stored as `00 80 00 3f`
   (0.502), 0.75 as 0.752 and 1.0 as 1.0039. A set only carries the top 16 bits of the
   float (section 8), and the amp sets the next bit (half a step, about 0.002). Compare a
-  dump to a sent value with a tolerance of about 0.005. The record **moves** between
-  presets (by up to about 20 bytes), so a fixed offset doesn't work. **Record ids repeat**,
-  though: every dump has `1f 00 00 00 03 00` 3 or 4 times (near 690-720, 1170-1190 and
-  1265-1285, plus 1028 on Chime) and `33 …` up to twice. They are probably numbered per
-  block (amp, effects, reverb), so a value has to be found by block and then id. The
-  block layout isn't known yet.
+  dump to a sent value with a tolerance of about 0.005.
+
+### The dump's layout: blocks of records (confirmed 2026-11-07, 17 dumps)
+
+Checked on every dump captured: the 4 presets in `captures/dump_params_5.txt` and the 13
+in `captures/preset_select_2.txt`. All parse the same way, into the same 13 blocks in the
+same order.
+
+1. **The data stream:** unpack each 309-byte chunk (top bits MSB-first, above) and keep
+   the **first 256** of its 259 bytes; the last 3 are padding. Join the chunks. (Keeping
+   all 259 puts 3 stray zero bytes into every record that crosses a chunk boundary.
+   That's why some records looked "not understood" in the table below.)
+2. **Records are 10 bytes:** `id, sub, 00, flag, type, 00`, then a 4-byte little-endian
+   value. `type` 03 = float, 01 = whole number (0/1 for on/off), 02 = a choice (whole
+   number), 07 = an id. `flag` 0x80 marks a block's info records.
+3. **A block** is 3 info records (flag 0x80), then its parameter records:
+   - `03`, type 07: which block, as `id | sub << 8` (for example 0x002A = block 2A sub 0,
+     0x0374 = block 74 sub 3). This is the wire block of the parameters inside.
+   - `05`, type 07: the block's "kind". For the amp block it differs per preset, so it's
+     probably the **amp model id** (Chime 0xDC, Jungle $lash 0xB0, Bass 0xBF). Not checked
+     against the `.models` files (section 10).
+   - `06`, type 02: how many parameter records follow.
+4. **The blocks, in order** (number of records in brackets, which varies with the model
+   for some):
+
+   | Block | Records | Holds |
+   |---|---|---|
+   | 74:3 | 25 | the panel: FX knobs and switches, Reverb, Volume (ids 0x26 to 0x3E) |
+   | 5E:2 | 2 | ? |
+   | 04:3 | 3 | ? |
+   | 0C:3 | 1 | ? |
+   | 19:3 | 2 to 5 | an effect? (kind varies) |
+   | 1B:3 | 2 to 5 | an effect? |
+   | 1D:3 | 5 | an effect? |
+   | 1F:3 | 2 or 3 | reverb? |
+   | **2A:0** | **5** | **the amp: ids 0x1C, 0x1D, 0x1E (Tone part), Drive, 0x20** |
+   | 21:3 | 1 | ? |
+   | 22:3 | 0 | ? |
+   | 23:3 | 2 | ? |
+   | 25:3 | 7 or 8 | ? (runs into the short last chunk) |
+
+5. **The amp block's 4th record is the Drive the preset uses:** id `0x1F` (= wire
+   2A:25, "Drive") on Chime, `0x33` (= wire 2A:26, "Drive (alt)") on Jungle $lash, Bass
+   and Ambient 1. Record ids are numbered per block and repeat across blocks (0x1F
+   appears in 19:3, 23:3 and 25:3 too), so always look in the right block first.
+6. **Record id to wire id**, where known from `tools/dump_params.py` (block 74:3 and
+   2A:0 only):
+
+   | Block | Record | Wire | Name |
+   |---|---|---|---|
+   | 74:3 | 0x26 / 0x2A / 0x2E | 1A / 1C / 1E | FX Knob (FX1 / FX2 / FX3), float |
+   | 74:3 | 0x28 / 0x2C / 0x30 | 48 / 47 / 46 | FX1 / FX2 / FX3 on/off, whole number |
+   | 74:3 | 0x32 | 20 | Reverb, float |
+   | 74:3 | 0x3C | 24 | Volume, float |
+   | 2A:0 | 0x1E | 24 | Tone (part), float |
+   | 2A:0 | 0x1F | 25 | Drive, float (some amp models) |
+   | 2A:0 | 0x33 | 26 | Drive (alt), float (the other amp models) |
+   | 2A:0 | 0x20 | 27 | Tone (the other id), float |
+
+   0x1C and 0x1D in the amp block, and the rest of the panel block (0x27, 0x29, 0x2B,
+   0x2D, 0x2F, 0x31, 0x33 to 0x3B, 0x3D, 0x3E), aren't matched to wire ids yet.
+7. Values in the amp block before any set, read this way, match the live reports: Drive
+   on Chime 0.433 (live report 0.4316).
+
+### Names: the amp's symbol table (confirmed 2026-11-07)
+
+**The Spider V MkII's names are `defaultSymbolTable_Parker.bin`** (in the app's `res`
+folder, section 10; format there). Its symbols are numbered from 0, and those numbers
+are the amp's ids:
+
+- **Block kinds are model names** (the `05` info record, layout point 3). All 11 amp-model
+  ids noted in the app (`captures/windows/models.txt`) sit at exactly their position in
+  the table, for example 0xDC = `ClassA30TopBoost`, 0xB0 = `Line6ChemicalX`, 0xBF =
+  `L6TubePreamp`. The symbol is the model's `symbolicID` in `amps.models` (and in
+  `stomps`/`mod`/`delay`/`reverbs`/`fixed`.models for the other blocks), which gives its
+  display name. So every block in a dump says which model it is:
+
+  | Block | Kinds seen | What it is |
+  |---|---|---|
+  | 74:3 | `SpiderVGuitarFlow` | the panel / signal chain |
+  | 5E:2 | `Gate` | noise gate |
+  | 04:3 | `VolumePedal` | volume pedal |
+  | 0C:3 | `Line6Vetta`, `Weeper`, `Fassel`, `Chrome` | wah |
+  | 19:3 | `Screamer`, `BassOverdrive`, `VettaComp`, `RedComp`, `L6BoostPlusEQ`, ... | FX1 (stomp) |
+  | 1B:3 | `AnalogChorus`, `OptoTremolo`, `Phaser`, `JetFlanger`, `AutoWah`, ... | FX2 (modulation) |
+  | 1D:3 | `L6DigitalDelay`, `TapeEcho`, `TubeEcho`, `AnalogDelay`, ... | FX3 (delay) |
+  | 1F:3 | `SmallRoom1`, `LuxSpring`, `VintagePlate`, `ReallyLargeHall`, ... | reverb |
+  | **2A:0** | `ClassA30TopBoost`, `Line6ChemicalX`, ... | **the amp** |
+  | 21:3 | 0 (none) | ? |
+  | 22:3 | `2x12ClassAStudio57OnAxis`, `4x12TreadplateStudio421`, ... | cab and mic |
+  | 23:3 | `SharcPodFixedComp` | compressor |
+  | 25:3 | `ParaGraphic4_band` | 4-band EQ |
+
+- **Wire ids in namespace 0** (`msg[18]` = 0 in a set, section 8) are symbol numbers too:
+  0x21 `Bass`, 0x23 `Mid`, 0x24 `Treble`, **0x25 `Gain`**, **0x26 `Drive`**, 0x27
+  `Presence`, 0x02 `Level`, 0x07 `Low`, 0x0A `Decay`. So:
+  - "Drive" (2A:25) in parameters.py is really **Gain**, and "Drive (alt)" (2A:26) is
+    **Drive**. Each amp model has one (`amps.models`): Chime's Class A-30 Top Boost has
+    Gain, Jungle's Chemical X has Drive.
+  - "Tone (part)" (2A:24) is **Treble**, and 2A:27 is **Presence**. **Bass is 2A:21**
+    (not 0x22) and **Mid 2A:23**.
+  - The ignored report "(2A,02)" (section 7) is the amp's **Level**.
+  - Ids in namespaces 1, 2 and 3 are numbered differently (0x60 in the gate is its
+    threshold, not the symbol `LoMid`); they are named from the app capture (section 8).
+- **Dump record ids are the parameters' "State" symbols** (namespace in the record's
+  second byte, 0 here): 0x1C `BassState`, 0x1D `MidState`, 0x1E `TrebleState`, 0x1F
+  `GainState`, 0x20 `PresenceState`, 0x33 `DriveState`. So a record names the parameter
+  it holds: drop "State".
+- The panel block (74:3) has 4 records per FX slot (0x26-0x29 FX1, 0x2A-0x2D FX2,
+  0x2E-0x31 FX3): the FX knob (float), a whole number, on/off, and a choice; probably
+  `FXnMix`, `FXnPost`, `FXnEnable` and `FXnMixType`.
+- The other tables (TT, Dio, FX100, AEON, Firebird, the default one) are for other
+  Line 6 products; an offset of 19 made some amp names fit by chance.
+
+### Offsets found by `tools/dump_params.py` (2026-11-06/07)
+
+Superseded by the layout above, but kept as the evidence for its record table. Offsets
+are into the 259-bytes-per-chunk view (1295 bytes).
 
   | Parameter (wire id) | Record id | Header seen | Offsets (presets 4 / 8 / 0 / 14) |
   |---|---|---|---|
@@ -136,23 +247,17 @@ knobs are left alone.
 
   (FX2 to 2A:27:0: 2026-11-07, `captures/dump_params.txt`. All read back as set except
   2A:27:0 on preset 14, where one byte changed but no float matched.)
-- **The panel block is regular:** records 20 bytes apart, ids stepping by 2: FX knob 1
-  0x26, FX1 0x28, FX knob 2 0x2A, FX2 0x2C, FX knob 3 0x2E, FX3 0x30, Reverb 0x32 (and
-  Volume 0x3C further on). The FX on/off records have type byte 01, the knobs 03.
-
-  "-" = the set changed nothing. Every value in the table reads back as set (MSB-first
-  unpacking, both runs), at exactly one offset, except FX1 on preset 8: one byte changed
-  there, but no float reads 0.5 then 0.75. FX1's header type byte is 01 instead of 03, so
-  it may be an on/off value rather than a 0-to-1 float.
+  "-" = the set changed nothing. The "not understood" headers and FX1's odd offsets are
+  records crossing a chunk boundary in this 259-byte view (see the layout above). FX1 is
+  a whole number (type 01), so setting it to 0.5 doesn't read back as 0.5.
 - Values found before any set, for the record (MSB-first): Drive on Chime 0.433 (the
   live report said 0.4316); Volume 0.592 / 0.240 / 0.702 / 0.700 and Reverb 0.204 /
   0.292 / 0.501 / 0.478 on presets 4 / 8 / 0 / 14; FX Knob (FX1) 1.0 and FX1 0.0 on all four.
 - **Drive or Drive (alt) depends on the preset** (**confirmed** on 4 presets): Chime
   (preset 4) only responds to 0x25; Jungle $lash, Bass and Ambient 1 only respond to
-  0x26. Probably it depends on the amp model. So "drive" has to send the one the current
-  preset uses (or both).
-- The amp's preset **type** (amp model, effect models) has not been located yet.
-  Expect numeric ids from the `.models` files (section 10).
+  0x26. The dump says which: the amp block's Drive record (layout, point 5).
+- The amp model is probably the amp block's "kind" (layout, point 3). The effect models
+  may be the other blocks' kinds. Not matched to the `.models` files yet.
 - A dump is not always returned. In the four Chime captures of 2026-11-03 it arrived in
   two (the first baseline and the "Drive" capture) and not in the other two (see
   section 9).
@@ -485,9 +590,150 @@ Which value each knob position loads: see section 11.
 A select sends no preset-change event; only the (29, 11, 1) message and the status
 message came back besides the dump.
 
-### Save command
+### Every control the app shows (confirmed 2026-11-07, `captures/windows/names.txt`)
 
-**Not found.** Needs a new capture of the app saving a spare user preset.
+Moving each control in the Line 6 app (Chime 1, then Gain/Drive on Jungle $lash),
+decoded with `tools/pcap_to_text.py`. Key = block:sub (`msg[13]`, `msg[14]`), id
+(`msg[17]`) and the id's namespace (`msg[18]`):
+
+| App section | Control | Block:sub | Id / namespace | Values |
+|---|---|---|---|---|
+| Noise gate | Threshold | 5E:2 | 60 / 2 | 14 to 77 seen (the model says -96 to 0 dB) |
+| Noise gate | Decay | 5E:2 | 0A / 0 | 0 to 1 |
+| Volume pedal | Min | 04:3 | 09 / 3 | 0 to 1 |
+| Volume pedal | Max | 04:3 | 0A / 3 | 0 to 1 |
+| Amp | **Gain** (Gain models) | 2A:0 | 25 / 0 | 0 to 1 |
+| Amp | **Drive** (Drive models) | 2A:0 | 26 / 0 | 0 to 1 |
+| Amp | Bass / Mid / Treble / Presence | 2A:0 | 21 / 23 / 24 / 27, ns 0 | 0 to 1 |
+| Amp | Volume | 74:3 | 24 / 3 | 0 to 1 |
+| Compressor | Threshold | 23:3 | 63 / 2 | 0 to 1 |
+| Compressor | Gain | 23:3 | 25 / 0 | 0 to 1 |
+| EQ | Low, gain | 25:3 | 07 / 0, 73 / 2 | 0 to 1 |
+| EQ | Low-mid, gain | 25:3 | 76 / 2, 79 / 2 | 0 to 1 |
+| EQ | High-mid, gain | 25:3 | 7B / 2, 25 / 0 | 0 to 1 |
+| EQ | High, gain | 25:3 | 7F / 2, 02 / 2 | 0 to 1 |
+| Reverb (a spring model) | Time | 1F:3 | 0A / 0 | 0 to 1 |
+| Reverb | Tone | 1F:3 | 46 / 2 | 0 to 1 |
+| Reverb | Mix | 1F:3 | 7A / **1** | 0 to 1 |
+| Panel | Reverb knob | 74:3 | 20 / 3 | 0 to 1 |
+
+The EQ's order follows `fixed.models` (Low, gain, LMid, gain, HMid, Gain, Hi, gain).
+
+What this changes:
+
+- **The two "sub" bytes of a set can differ.** `msg[14]` is the block's sub and `msg[18]`
+  the id's namespace. parameters.py has one `sub` for both, which is right for the amp
+  (0/0) and the panel (3/3), but **not for "Reverb (mix)"**: the app sends block 1F
+  **sub 3**, id 7A **namespace 1**; parameters.py sends sub 1 in both places, which is
+  why it "changed nothing" (section 8 table). Live reports carry the namespace
+  (`msg[27]`), so report keys `(block, id, namespace)` stay as they are.
+- **Not every value is 0 to 1:** the gate threshold is sent as 14 to 77 (probably dB,
+  negated). The value bytes are the float's top 16 bits as usual; only the range check in
+  `encode_set_value` is in the way.
+- **`msg[20]` ("unknown", section 8)** cycles 0, 1, 2, 3 in the app's sets. The Pi sends 1
+  every time, which works.
+- **The app paces sets like the Pi:** begin and set, then it waits for the 29-byte answer
+  before the next (10 to 20 ms apart).
+
+### Stages: on/off, types, order (2026-11-07, `captures/windows/session.txt`)
+
+From a guided session (`tools/capture_gatherer.html`, log in `captures/windows/session_log.txt`).
+The app shows the preset as a chain of stages: Gate, Wah, Stomp, a mod slot, Amp (with
+the cab), Comp, EQ, Vol, Delay, Reverb. Each is one block in the dump (section 3).
+
+**On/off (confirmed):** a normal set on the panel block, 74:3, namespace 3, with a whole
+number: the first value byte (`msg[26]`) is `01` for on, `00` for off, the rest zero.
+**`msg[22]` is `03` in these sets, not the `04` of every float set** (all on/off sets in
+`session.txt` and `names.txt`), so it is probably the value's type. `build_set_message`
+always sends `04`; whether the amp minds for on/off is untested.
+
+| Stage | Gate | Wah | Stomp (FX1) | Mod (FX2) | Comp | EQ | Vol | Delay (FX3) | Reverb |
+|---|---|---|---|---|---|---|---|---|---|
+| 74:3 id | 4D | 51 | 48 | 47 | 4A | 4B | 49 | 46 | 50 |
+
+The Amp and the cab have no switch (the app only moves between them).
+
+**Which stages are on, and where they sit, differ per preset** (the session log notes 5
+presets); the mod slot moved between "before Stomp", "after Stomp" and "after EQ". How
+the order is stored isn't decoded yet; it's probably in the panel block (74:3).
+
+**Changing a stage's type (seen 14 times):** no set, but an **upload to the edit buffer**
+(see "Uploads" under the save command below): the header gives slot `FF FF FF FF` and
+the data length, and the data is a short preset, 2 chunks:
+
+1. the preset's first 210 bytes (the "PSRP" header and name; the same each time)
+2. **just the changed block**: its info records (05 = the new model) and the model's
+   records with their starting values
+
+The number that "changed each time" in the header is the data length. All 14 rebuild
+byte for byte (scratch `save4.py`, 2026-11-07).
+
+The new models match the app (Fuzz Pi → Screamer, Phaser → U-Vibe, Brit Gain 18 →
+Plexi 45, 4x12 Green 20s → Green 25s, Tube Echo → Multi-Head, Slap Plate → Vintage Plate),
+and the records are the model's controls: Fuzz Pi has `33/0` DriveState, `1F/0`
+GainState and `75/1` (the app calls them Drive, Gain, Tone). So: **to change a type,
+upload the block with its new model and values to the edit buffer.** Not known yet:
+whether the amp finds the block by its block number (most likely, since each stage
+has its own) and what it does with records the new model doesn't have.
+
+**The new type's knobs are normal sets in its block,** for example the wah's Position
+(0C:3, id 6A, namespace 1) and Fuzz Pi's Drive (19:3, id 26/0), Gain (25/0) and Tone
+(7A/1).
+
+**Moving a stage (seen once):** a set on 74:3 id 40 (namespace 3), then a header message
+and an upload of the panel block, then a 21-byte message `... 02 40 ...`. Not decoded.
+
+**"Save as" (not seen):** the session's save-as uploaded the whole preset with slot 4
+in its header, and then read back slot 4, so it went over Chime 1 like the first save.
+Since the upload header carries the slot (below), save-as is very likely the same
+upload with another slot number. Untested.
+
+**Left for v1.1 (decided 2026-11-07):** type changes, stage moves and save-as. v1.0 has
+every knob and on/off, reads each stage's model and the chain, and saves to the current
+slot. Notes for v1.1:
+
+- The app only lets a stage go into certain chain positions (seen by the user when
+  dragging). Find out why before writing moves: likely fixed regions (before the amp,
+  after the amp, around the cab) or a stage-type rule. Capture several drags, including
+  ones the app refuses, and compare the panel block before and after each.
+- The type-change header is decoded (an upload to slot FF FF FF FF, below). What's left
+  is trying one on the amp.
+- Try save-as by uploading with another slot number, on a user preset; or capture the
+  app saving into a different slot.
+
+### Save command (one capture, 2026-11-07, `captures/windows/save.txt`)
+
+**Saving uploads the whole preset to its slot.** Every upload in the captures (this
+save, the session's save-as and 14 type changes) rebuilds byte for byte from the rules
+below (scratch `save4.py`, 2026-11-07).
+
+**Uploads.** All on channel 1 (`msg[7]` = 1):
+
+1. **Header message**, counter N (`msg[8]`), index 0 (`msg[9]`). Its data (16 bytes) is
+   four little-endian 32-bit numbers: `0C`, **length + 8**, **slot**, **length**. The slot
+   is the preset number (4 for Chime 1), or `FF FF FF FF` for the edit buffer (a type
+   change). "Length" is the data's length in bytes.
+2. **Data messages**, all with counter N + 1, index 0, 1, 2..., each carrying the next
+   **210 bytes** of the data (the last one less).
+3. The amp answers once, after the last data message, with the usual 29-byte channel-1
+   answer (`msg[11:14]` = `0B 00 01`).
+
+**Every one of these messages** (and the dump's own chunks) uses the same framing:
+`msg[10:12]` is the data length minus 1, split into two halves (`0D 01` = 0xD1 = 209 for
+210 bytes, `0C 0A` = 202 for 203, `00 0F` = 15 for the header's 16, a dump's `0F 0F` =
+255 for 256); the data is padded with zeros to a whole group of 7 and packed (section 3,
+MSB-first); then `F7`.
+
+**The data of a save is a preset in the dump's format**: "PSRP", the name, and the blocks
+of records. A dump's unpacked data starts with its own 12-byte header,
+`01 00 00 00`, a length, `00 00 00 00` (Chime: length 1297, the bytes after it), so the
+preset is the dump's data after those 12 bytes. **Not proven: that the amp takes its own
+dump back unchanged.** The app's upload is not a byte copy of the dump: it orders the
+first records differently and leaves a few out (Chime: 1253 bytes uploaded, 1293 in the
+dump read back straight after). Try it on a user preset first.
+
+After saving, the app reads the preset back: a preset-list request (kind 0x0E, index 4),
+a select of 4, and a dump request. The name stayed "Chime 1: Class-A".
 
 ## 9. Reliability: the amp's "wedge"
 
@@ -550,8 +796,9 @@ These are the app's own files, used here only as reference. **Do not commit them
   import/export format.
 - `defaultSymbolTable*.bin` (611 entries, or 629 in the TT/FX100/Dio variants):
   `u32 count, u32 size`, then `count` records `(offset, hash, length)` into a string
-  area at byte `8 + 12*count`. The indices do **not** match the wire ids, so they are not
-  needed.
+  area at byte `8 + 12*count`. **`defaultSymbolTable_Parker.bin` (910 symbols) is the
+  Spider V MkII's:** symbol numbers are its model ids and its namespace-0 parameter ids
+  (section 3, "Names: the amp's symbol table"). The other tables are for other products.
 
 ## 11. Preset knob positions
 
@@ -630,8 +877,8 @@ and numbering (section 11); FX2, FX3, their knobs and both Tone ids are in the d
   too soon (section 8)? A select, a dump and waiting don't.
 - How long after power-on until the handshake gets the preset list (section 9).
 - Why preset 115 doesn't load.
-- The dump's block layout: how to tell which `0x1F` / `0x33` record is the amp's Drive,
-  and so which Drive id the current preset uses (section 3).
+- What the other dump blocks are (5E:2, 04:3, 0C:3, 19:3 to 1F:3, 21:3 to 25:3), and
+  the amp block's records 0x1C and 0x1D (section 3).
 - The cause of the wedge, and a reliable way to get the dump every time.
 - Where the amp model and effect models are stored in the dump, and the layout of the
   rest of the dump (record numbering, Tone values).

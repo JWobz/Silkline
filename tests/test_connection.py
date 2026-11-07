@@ -1,91 +1,19 @@
-import queue
 import threading
 import time
 import unittest
-from pathlib import Path
 
 from spiderweb.connection import Connection
 from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
 from spiderweb.protocol.dump import DumpCollector
 from spiderweb.protocol.messages import DUMP_REQUEST
+from tests.helpers import FakeTransport, Recorder, capture_messages, replies_to
 
-CAPTURES = Path(__file__).resolve().parent.parent / "captures"
 
 HELLO = b"\xf0hello\xf7"
 HELLO_REPLY = b"\xf0hello-reply\xf7"
 ASK = b"\xf0ask\xf7"
 REPLY = b"\xf0R1\xf7"
 OTHER = b"\xf0other\xf7"
-
-
-class FakeTransport:
-    """ Stands in for AmpTransport.
-
-    Everything the "amp" sends goes through one queue. Tests put messages (or an
-    exception, which is raised by the read) into it with `arrive()`. `auto_reply`
-    is called with each sent message and returns the messages the amp answers with.
-    """
-    def __init__(self, auto_reply=None):
-        self.incoming = queue.Queue()
-        self.sent = []
-        self.auto_reply = auto_reply or (lambda msg: [])
-        self.fail_send = False
-        self.closed = False
-
-    def arrive(self, *items):
-        for item in items:
-            self.incoming.put(item)
-
-    def send(self, msg):
-        if self.fail_send:
-            raise OSError("send failed")
-        self.sent.append(msg)
-        self.arrive(*self.auto_reply(msg))
-
-    def read_messages(self, quiet=0.05, limit=1.0):
-        """ Handshake-style read: everything waiting right now. """
-        msgs = []
-        while True:
-            try:
-                item = self.incoming.get_nowait()
-            except queue.Empty:
-                return msgs
-            if isinstance(item, Exception):
-                raise item
-            msgs.append(item)
-
-    def read(self, timeout):
-        try:
-            item = self.incoming.get(timeout=timeout)
-        except queue.Empty:
-            return []
-        if isinstance(item, Exception):
-            raise item
-        return [item]
-
-    def close(self):
-        self.closed = True
-
-
-class Recorder:
-    """ A callback that keeps every call's argument, and can wait for some to arrive. """
-    def __init__(self, action=None):
-        self.calls = []
-        self.threads = []
-        self.action = action
-        self._arrived = threading.Condition()
-
-    def __call__(self, arg):
-        if self.action:
-            self.action(arg)
-        with self._arrived:
-            self.calls.append(arg)
-            self.threads.append(threading.current_thread())
-            self._arrived.notify_all()
-
-    def wait_for(self, count=1, timeout=2.0):
-        with self._arrived:
-            return self._arrived.wait_for(lambda: len(self.calls) >= count, timeout)
 
 
 class Counting:
@@ -101,11 +29,6 @@ class Counting:
 
     def complete(self):
         return len(self.chunks) >= self.n
-
-
-def replies_to(table):
-    """ auto_reply from a dict: sent message -> list of replies. """
-    return lambda msg: table.get(msg, [])
 
 
 class ConnectionTest(unittest.TestCase):
@@ -543,18 +466,6 @@ class TestOpenTwice(ConnectionTest):
             pass
         readers = [t for t in threading.enumerate() if t.name == "amp-reader" and t.is_alive()]
         self.assertEqual(len(readers), 1)
-
-
-def capture_messages(name):
-    """ Every hex message in a capture file (the last word of each line; other lines skipped). """
-    messages = []
-    for line in (CAPTURES / name).read_text().splitlines():
-        words = line.split()
-        try:
-            messages.append(bytes.fromhex(words[-1]))
-        except (ValueError, IndexError):
-            continue
-    return messages
 
 
 class TestRealDump(ConnectionTest):

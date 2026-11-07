@@ -1,4 +1,6 @@
-"""The real-amp questions still open on 2026-11-07, in one guided run.
+"""(Archived 2026-11-07: done; results in protocol.md sections 8, 9 and 11.)
+
+The real-amp questions still open on 2026-11-07, in one guided run.
 
 Usage (from the project root, on the Pi, amp on, guitar plugged in):
     python3 -m tools.amp_survey
