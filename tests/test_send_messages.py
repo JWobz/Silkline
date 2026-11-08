@@ -14,7 +14,7 @@ from spiderweb.protocol.messages import (
     SetAnswer,
     build_begin_message,
     build_set_message,
-    is_set_answer,
+    _is_set_answer,
 )
 from spiderweb.protocol.parameters import PARAMETERS
 from spiderweb.protocol.values import encode_set_value
@@ -129,15 +129,15 @@ class TestSetMessage(unittest.TestCase):
 
 class TestSetAnswer(unittest.TestCase):
     def test_the_amps_answer_to_a_set(self):
-        self.assertTrue(is_set_answer(SET_ANSWER))
+        self.assertTrue(_is_set_answer(SET_ANSWER))
 
     def test_the_answer_to_a_select_is_not_it(self):
         # Same shape, but on channel 1 (msg[7] == 1).
-        self.assertFalse(is_set_answer(SELECT_ANSWER))
+        self.assertFalse(_is_set_answer(SELECT_ANSWER))
 
     def test_other_messages_are_not_it(self):
         for msg in (DUMP_REQUEST, STATUS, build_begin_message(0x0C), drive_set(), b""):
-            self.assertFalse(is_set_answer(msg), msg.hex())
+            self.assertFalse(_is_set_answer(msg), msg.hex())
 
     def test_collector_is_complete_after_the_answer(self):
         collector = SetAnswer()

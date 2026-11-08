@@ -1,4 +1,7 @@
-"""What AmpService knows and tells: AmpState, the Event it sends, and their kinds.
+"""
+state.py
+
+What AmpService knows and tells: AmpState, the Event it sends, and their kinds.
 
 Plain data only; nothing here talks to the amp.
 """

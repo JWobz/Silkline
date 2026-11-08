@@ -34,15 +34,15 @@ class TestHandleMessage(unittest.TestCase):
     def test_preset_clicks_give_sixteen_knob_moves(self):
         service, recorder = make_service()
         for msg in read_capture("preset_clicks.txt"):
-            service.handle_message(msg)
+            service._handle_message(msg)
         positions = [e.data["position"] for e in recorder.of(EventType.KNOB_MOVED)]
         self.assertEqual(positions, list(range(1, 16)) + [0])
         self.assertEqual(service.state().knob_position, 0)
 
     def test_small_jitter_is_ignored(self):
         service, recorder = make_service()
-        service.handle_message(bytes.fromhex(REVERB_LOW))
-        service.handle_message(bytes.fromhex(REVERB_JITTER))
+        service._handle_message(bytes.fromhex(REVERB_LOW))
+        service._handle_message(bytes.fromhex(REVERB_JITTER))
         changes = recorder.of(EventType.PARAMETER_CHANGED)
         self.assertEqual(len(changes), 1)                      # only the first report
         self.assertEqual(changes[0].data["key"], (0x74, 0x20, 3))
@@ -50,23 +50,23 @@ class TestHandleMessage(unittest.TestCase):
 
     def test_big_change_is_reported(self):
         service, recorder = make_service()
-        service.handle_message(bytes.fromhex(REVERB_LOW))
+        service._handle_message(bytes.fromhex(REVERB_LOW))
         bigger = bytearray.fromhex(REVERB_LOW)
         bigger[38] = 0x30                                      # third value byte: about 0.69
-        service.handle_message(bytes(bigger))
+        service._handle_message(bytes(bigger))
         values = [e.data["value"] for e in recorder.of(EventType.PARAMETER_CHANGED)]
         self.assertEqual(len(values), 2)
         self.assertAlmostEqual(service.state().params[(0x74, 0x20, 3)], values[-1])
 
     def test_amp_02_is_ignored(self):
         service, recorder = make_service()
-        service.handle_message(bytes.fromhex(AMP_02))
+        service._handle_message(bytes.fromhex(AMP_02))
         self.assertEqual(recorder.events, [])
         self.assertNotIn((0x2A, 0x02, 0), service.state().params)
 
     def test_tap_sets_bpm(self):
         service, recorder = make_service()
-        service.handle_message(bytes.fromhex(TAP))
+        service._handle_message(bytes.fromhex(TAP))
         taps = recorder.of(EventType.TAP)
         self.assertEqual(len(taps), 1)
         self.assertAlmostEqual(taps[0].data["bpm"], 157.0)
@@ -74,7 +74,7 @@ class TestHandleMessage(unittest.TestCase):
 
     def test_save_pressed(self):
         service, recorder = make_service()
-        service.handle_message(bytes.fromhex(SAVE))
+        service._handle_message(bytes.fromhex(SAVE))
         self.assertEqual([e.event_type for e in recorder.events], [EventType.SAVE_PRESSED])
 
     def test_failing_callback_does_not_stop_others(self):
@@ -86,7 +86,7 @@ class TestHandleMessage(unittest.TestCase):
         recorder = Recorder()
         service.on_change(broken)
         service.on_change(recorder)
-        service.handle_message(bytes.fromhex(SAVE))
+        service._handle_message(bytes.fromhex(SAVE))
         self.assertEqual(len(recorder.events), 1)
 
     def test_callback_can_read_state(self):
@@ -94,7 +94,7 @@ class TestHandleMessage(unittest.TestCase):
         service = AmpService()
         seen = []
         service.on_change(lambda event: seen.append(service.state().bpm))
-        service.handle_message(bytes.fromhex(TAP))
+        service._handle_message(bytes.fromhex(TAP))
         self.assertAlmostEqual(seen[0], 157.0)
 
 

@@ -71,7 +71,7 @@ A reconnect looks like: `DISCONNECTED` (with `"error"`), `CONNECTING`, then `CON
 ## Threads
 
 - **Reader** (`amp-reader`, one per connection): reads everything, hands request replies
-  to the waiting command, and everything else to `handle_message`, which updates the
+  to the waiting command, and everything else to `_handle_message`, which updates the
   state and sends events. `on_change` callbacks run here.
 - **Supervisor** (`amp-supervisor`, while `keep_connected()` runs): connects and reconnects.
 - **Commands** run on the caller's thread and wait for the reader.

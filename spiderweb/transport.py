@@ -1,4 +1,7 @@
-"""The raw MIDI device: finding the amp, and reading and writing whole SysEx messages.
+"""
+transport.py
+
+The raw MIDI device: finding the amp, and reading and writing whole SysEx messages.
 
 The lowest layer; Connection is the only user.
 """
@@ -9,7 +12,7 @@ import time
 from spiderweb.errors import AmpNotFound
 from spiderweb.logger import Logger
 
-SPIDER_KEYWORD = "spider"
+_SPIDER_KEYWORD = "spider"
 
 
 class AmpTransport:
@@ -90,7 +93,7 @@ def find_device():
             first = line.split()[0] if line.split() else ""
             if first.isdigit():
                 card = first  # a card's first line: remember its number
-            if SPIDER_KEYWORD in line.lower() and card is not None:
+            if _SPIDER_KEYWORD in line.lower() and card is not None:
                 return f"/dev/snd/midiC{card}D0"
     raise AmpNotFound(
         "Could not find amp port. Please check that the amp is connected and powered on."

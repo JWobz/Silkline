@@ -1,4 +1,7 @@
-"""The parameters the API can set and read, by name (protocol.md section 8).
+"""
+parameters.py
+
+The parameters the API can set and read, by name (protocol.md section 8).
 
 PARAMETERS lists them; BY_NAME finds one by its lower-case name and
 KNOWN_PARAMETERS names a wire key. DUMP_RECORDS says which dump record holds

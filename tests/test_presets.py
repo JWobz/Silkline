@@ -10,7 +10,8 @@ import unittest
 from spiderweb.amp import load_handshake
 from spiderweb.protocol.dump import DUMP_CHUNK_LENGTH, DumpCollector
 from spiderweb.protocol.messages import DUMP_REQUEST
-from spiderweb.protocol.presets import entry_name, preset_list_request, preset_names, unpack
+from spiderweb.protocol.packing import unpack
+from spiderweb.protocol.presets import entry_name, preset_list_request, preset_names
 from tests.helpers import (
     ACOUSTIC,
     BASS_LONG,

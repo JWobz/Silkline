@@ -121,7 +121,7 @@ class TestSet(AmpTest):
     def test_set_raw_sends_begin_then_set(self):
         amp, fake = self.make()
         raw5 = bytes([1, 2, 3, 4, 5])
-        amp.set_raw(0x2A, 0, 0x25, raw5, 0)
+        amp._set_raw(0x2A, 0, 0x25, raw5, 0)
         self.assertEqual(fake.sent, [
             build_begin_message(FIRST_SEQ),
             build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x25, raw5, 0, unknown=1),
@@ -130,7 +130,7 @@ class TestSet(AmpTest):
     def test_set_raw_passes_unknown_through(self):
         amp, fake = self.make()
         raw5 = bytes(5)
-        amp.set_raw(0x2A, 0, 0x25, raw5, 0, unknown=3)
+        amp._set_raw(0x2A, 0, 0x25, raw5, 0, unknown=3)
         self.assertEqual(fake.sent[1], build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x25, raw5, 0, unknown=3))
 
     def test_set_parameter_sends_the_encoded_value(self):

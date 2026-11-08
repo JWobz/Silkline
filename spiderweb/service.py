@@ -9,7 +9,7 @@ offers the commands the server will use (set, get, select_preset, presets).
 keep_connected() keeps it connected through unplugs, power-cycles and dead
 sets (protocol.md sections 8 and 9).
 
-Threads: commands run on the caller's thread. handle_message, _on_preset_dump
+Threads: commands run on the caller's thread. _handle_message, _on_preset_dump
 and _handle_lost run on the connection's reader thread, and so do the
 callbacks they trigger. Reconnecting runs on the "amp-supervisor" thread.
 Two locks: _lifecycle_lock keeps start() and stop() one at a time, and
@@ -27,24 +27,24 @@ from spiderweb.protocol.dump import (
     DumpCollector,
     preset_data,
     read_values,
-    stage_models,
 )
 from spiderweb.protocol.knob import settle_position
 from spiderweb.protocol.messages import MessageKind, classify
-from spiderweb.protocol.models import load_model_names, model_name
+from spiderweb.protocol.models import ModelNames
 from spiderweb.protocol.parameters import BY_NAME, KNOWN_PARAMETERS
 from spiderweb.protocol.presets import UNLOADABLE, preset_list_request, preset_names
-from spiderweb.protocol.symbols import load_symbols
 from spiderweb.state import AmpState, ConnectionState, Event, EventType
 
-APP_DATA_FOLDER = Path(__file__).resolve().parent.parent / "app_data"   # the Line 6 app's res folder, never committed
-RECONNECT_DELAYS = (1, 2, 5, 10, 30)   # seconds between failed connects; the last one repeats
-GAIN = BY_NAME["gain"]
-DRIVE = BY_NAME["drive"]
+APP_DATA_FOLDER = (Path(__file__).resolve().parent.parent / "app_data") # The app's res folder
+RECONNECT_DELAYS = (1, 2, 5, 10, 30)    # seconds between failed connects; the last one repeats
+_GAIN = BY_NAME["gain"]
+_DRIVE = BY_NAME["drive"]
+
 
 def default_amp():
     """The real amp: found on USB, opened with the recorded handshake."""
     return Amp(Connection(load_handshake()))
+
 
 class AmpService:
     """The one owner of the amp: its state, its events and its commands.
@@ -61,8 +61,7 @@ class AmpService:
         self._logger = Logger(prefix="AmpService")
         self._state = AmpState()
         self._amp = None
-        self._resource_folder = None
-        self.amp_factory = amp_factory
+        self._amp_factory = amp_factory  
         self._threading_lock = threading.Lock()
         self._lifecycle_lock = threading.Lock()
         self._stopping = threading.Event()
@@ -73,26 +72,20 @@ class AmpService:
         self._callbacks = []
         self._knob_candidates = []
         self._presets = {}
-        self._pending = {}                      # set_latest: param key -> (param, value) not sent yet
+        self._pending = {}  # set_latest: param key -> (param, value) not sent yet
         self._pending_lock = threading.Lock()
-        self._draining = False                  # True while a set_latest caller is sending
-        self._symbols = []
-        self._model_names = {}
+        self._draining = False  # True while a set_latest caller is sending
 
         if resource_folder is not None:
             self._resource_folder = Path(resource_folder)
-        if self._resource_folder is not None:
-            try: self._symbols = load_symbols(self._resource_folder / "defaultSymbolTable_Parker.bin")
-            except FileNotFoundError: self._logger.warning("Cannot find symbols file")
-            try: self._model_names = load_model_names(self._resource_folder) 
-            except FileNotFoundError: self._logger.warning("Cannot find models file")
+        else:         
+            self._resource_folder = None
 
-    def set_connection(self, new_state: ConnectionState):
-        """Records the connection state and sends CONNECTION_CHANGED."""
-        with self._threading_lock:
-            self._state.connection = new_state
-        self._emit(EventType.CONNECTION_CHANGED, {"state": new_state})
-
+        try:
+            self._model_names = ModelNames(self._resource_folder)
+        except FileNotFoundError:
+            self._logger.warning(f"Resource folder not found at {self._resource_folder}")
+            self._model_names = ModelNames(None)
 
     def start(self):
         """Makes the amp, connects and runs the handshake. Does nothing unless DISCONNECTED.
@@ -114,19 +107,25 @@ class AmpService:
             if self._amp is not None:
                 self._amp.close()
                 self._amp = None
-            self.set_connection(ConnectionState.CONNECTING)
+            self._set_connection(ConnectionState.CONNECTING)
             try:
-                self._amp = self.amp_factory()
-                self._amp.add_listener(self.handle_message)
+                self._amp = self._amp_factory()
+                self._amp.add_listener(self._handle_message)
                 self._amp.on_lost(self._handle_lost)
                 self._handshake_replies = self._amp.connect()
                 collector = DumpCollector()
                 for lines in self._handshake_replies:
                     for reply in lines:
                         collector.offer(reply)
-                presets = preset_names(self._amp.handshake_lines, self._handshake_replies)
-                presets = {i: name for i, name in presets.items() if i not in UNLOADABLE}
-                asked = any(preset_list_request(line) for line in self._amp.handshake_lines)
+                presets = preset_names(
+                    self._amp.handshake_lines, self._handshake_replies
+                )
+                presets = {
+                    i: name for i, name in presets.items() if i not in UNLOADABLE
+                }
+                asked = any(
+                    preset_list_request(line) for line in self._amp.handshake_lines
+                )
                 if asked and not presets:
                     raise AmpError("no preset list in handshake (amp not ready yet?)")
                 with self._threading_lock:
@@ -135,7 +134,7 @@ class AmpService:
                     if collector.complete():
                         self._state.preset_name = collector.name()
                         self._state.params = read_values(collector)
-                        self._state.models = self._models(collector)
+                        self._state.models = self._model_names.describe(collector)
                     else:
                         self._state.params = {}
                         self._state.models = {}
@@ -144,11 +143,10 @@ class AmpService:
                 if self._amp is not None:
                     self._amp.close()
                     self._amp = None
-                self.set_connection(ConnectionState.DISCONNECTED)
+                self._set_connection(ConnectionState.DISCONNECTED)
                 raise
 
-            self.set_connection(ConnectionState.CONNECTED)
-        
+            self._set_connection(ConnectionState.CONNECTED)
 
     def stop(self):
         """Ends keep_connected(), closes the amp and ends DISCONNECTED.
@@ -171,7 +169,7 @@ class AmpService:
             self._amp.close()
             self._amp = None
             if self._state.connection != ConnectionState.DISCONNECTED:
-                self.set_connection(ConnectionState.DISCONNECTED)
+                self._set_connection(ConnectionState.DISCONNECTED)
 
     def keep_connected(self):
         """Connects in the background, and reconnects whenever the amp is lost.
@@ -185,7 +183,9 @@ class AmpService:
         if self._supervisor is not None and self._supervisor.is_alive():
             return
         self._stopping.clear()
-        self._supervisor = threading.Thread(target=self._supervise, name="amp-supervisor", daemon=True)
+        self._supervisor = threading.Thread(
+            target=self._supervise, name="amp-supervisor", daemon=True
+        )
         self._supervisor.start()
 
     def _supervise(self):
@@ -208,22 +208,13 @@ class AmpService:
             self._wake.wait()
             self._wake.clear()
 
-    def _models(self, dump):
-        """Each stage's model in a dump: {stage: {"number", "id", "name"}}.
+    def _set_connection(self, new_state: ConnectionState):
+        """Records the connection state and sends CONNECTION_CHANGED."""
+        with self._threading_lock:
+            self._state.connection = new_state
+        self._emit(EventType.CONNECTION_CHANGED, {"state": new_state})
 
-        number is what the amp sends; id the symbol table's name for it and name
-        the .models files' name, each None without the Line 6 files (or for a
-        model they don't know).
-        """
-        models = {}
-        for stage, number in stage_models(dump).items():
-            symbol = name = None
-            if (number < len(self._symbols)):
-                symbol = self._symbols[number]
-                name = model_name(symbol, self._model_names)
-            models[stage] = {"number": number, "id": symbol, "name": name} 
-        return models
-    
+
     def _resolve(self, param):
         """The parameter a name really means: Gain and Drive are the same knob.
 
@@ -234,14 +225,14 @@ class AmpService:
         so after a set with no dump the other name follows it. Every other parameter
         is returned as it is.
         """
-        if param not in (GAIN, DRIVE):
+        if param not in (_GAIN, _DRIVE):
             return param
         with self._threading_lock:
             params = self._state.params
-            if DRIVE.key in params and GAIN.key not in params:
-                return DRIVE
-            if GAIN.key in params and DRIVE.key not in params:
-                return GAIN
+            if _DRIVE.key in params and _GAIN.key not in params:
+                return _DRIVE
+            if _GAIN.key in params and _DRIVE.key not in params:
+                return _GAIN
             return param
 
     def get(self, name):
@@ -257,8 +248,8 @@ class AmpService:
             raise ValueError("Cannot find parameter to get")
         param = self._resolve(param)
         with self._threading_lock:
-            return self._state.params.get(param.key) 
-        
+            return self._state.params.get(param.key)
+
     def set(self, name, value):
         """Sets a parameter by name (any case, e.g. "volume") to a value.
 
@@ -268,7 +259,7 @@ class AmpService:
         the event names that one. Waits for the amp's answer, then records the value and sends
         PARAMETER_CHANGED. The amp never reports a set back (protocol.md
         section 8), so what was sent is what get() shows; later knob turns
-        still come in through handle_message. Don't call it from an on_change
+        still come in through _handle_message. Don't call it from an on_change
         callback. Raises AmpDisconnected if not connected, AmpTimeout if the
         amp doesn't answer (the state is then unchanged, and because sets are
         then probably dead, protocol.md section 8, the supervisor is asked to
@@ -293,7 +284,7 @@ class AmpService:
             raise ValueError("Cannot find parameter to set")
         if not param.settable:
             raise ValueError(f"{param.name} can't be set")
-        
+
         param = self._resolve(param)
         param.encode(value)
         return param
@@ -303,7 +294,7 @@ class AmpService:
 
         If the amp doesn't answer, sets are probably dead (protocol.md section 8):
         it asks the supervisor to reconnect and re-raises the AmpTimeout.
-        """     
+        """
         try:
             amp = self._amp
             if amp is None:
@@ -312,10 +303,13 @@ class AmpService:
         except AmpTimeout:
             self._logger.warning("set not answered; reconnecting")
             self._reconnect_soon()
-            raise        
+            raise
         with self._threading_lock:
             self._state.params[param.key] = value
-        self._emit(EventType.PARAMETER_CHANGED, {"key": param.key, "name": param.name, "value": value})
+        self._emit(
+            EventType.PARAMETER_CHANGED,
+            {"key": param.key, "name": param.name, "value": value},
+        )
 
     def set_latest(self, name, value):
         """Sets a parameter like set(), but for sliders: the newest value wins.
@@ -362,7 +356,9 @@ class AmpService:
                     self._draining = False
                 return
             except AmpError as e:
-                self._logger.warning(f"set_latest {param.name}: {e!r}")    # a timeout already reconnects
+                self._logger.warning(
+                    f"set_latest {param.name}: {e!r}"
+                )  # a timeout already reconnects
 
     def select_preset(self, n):
         """Loads preset n (an index into the amp's preset list) and returns its name.
@@ -384,7 +380,7 @@ class AmpService:
             self._state.preset_number = n
             self._state.preset_name = name
             self._state.params = read_values(dump)
-            self._state.models = self._models(dump)
+            self._state.models = self._model_names.describe(dump)
         self._emit(EventType.PRESET_CHANGED, {"number": n, "name": name})
         return name
 
@@ -413,7 +409,7 @@ class AmpService:
         """
         self._callbacks.append(callback)
 
-    def handle_message(self, msg):
+    def _handle_message(self, msg):
         """Updates the state from one message and sends the events it causes.
 
         The connection's listener, so it runs on the reader thread.
@@ -472,8 +468,8 @@ class AmpService:
                     events.append((EventType.SAVE_PRESSED, {}))
                 case _:
                     return
-                
-        if knob_settled and self._amp is not None:  
+
+        if knob_settled and self._amp is not None:
             if not self._amp.refresh_preset(self._on_preset_dump):
                 self._logger.warning("busy, preset name not refreshed")
 
@@ -492,7 +488,7 @@ class AmpService:
                 self._state.preset_name = name
                 self._state.preset_number = None
                 self._state.params = read_values(dump)
-                self._state.models = self._models(dump)
+                self._state.models = self._model_names.describe(dump)
             self._emit(EventType.PRESET_CHANGED, {"number": None, "name": name})
         else:
             self._logger.warning("Preset dump is incomplete")
@@ -506,7 +502,10 @@ class AmpService:
         """
         with self._threading_lock:
             self._state.connection = ConnectionState.DISCONNECTED
-        self._emit(EventType.CONNECTION_CHANGED, {"state": ConnectionState.DISCONNECTED, "error": repr(error)})
+        self._emit(
+            EventType.CONNECTION_CHANGED,
+            {"state": ConnectionState.DISCONNECTED, "error": repr(error)},
+        )
         self._wake.set()
 
     def presets(self):
@@ -527,8 +526,11 @@ class AmpService:
         """
         with self._threading_lock:
             self._state.connection = ConnectionState.DISCONNECTED
-        self._emit(EventType.CONNECTION_CHANGED, {"state": ConnectionState.DISCONNECTED, "error": "set timed out"})
-        self._wake.set()      
+        self._emit(
+            EventType.CONNECTION_CHANGED,
+            {"state": ConnectionState.DISCONNECTED, "error": "set timed out"},
+        )
+        self._wake.set()
 
     def save(self):
         """Saves the preset as it is now (every set included) into the loaded slot, and returns its name.
@@ -547,11 +549,15 @@ class AmpService:
         with self._threading_lock:
             n = self._state.preset_number
         if n is None:
-            raise ValueError("save: which slot is loaded isn't known; select a preset first")
+            raise ValueError(
+                "save: which slot is loaded isn't known; select a preset first"
+            )
         dump = amp.request_dump()
         amp.upload(n, preset_data(dump))
         dump_after = amp.request_dump()
         if read_values(dump_after) != read_values(dump):
-            self._logger.warning("save: the preset read back differs from what was saved")
+            self._logger.warning(
+                "save: the preset read back differs from what was saved"
+            )
         self._emit(EventType.PRESET_SAVED, {"number": n, "name": dump.name()})
         return dump.name()

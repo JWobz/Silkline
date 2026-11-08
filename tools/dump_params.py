@@ -45,18 +45,8 @@ from spiderweb.amp import Amp, load_handshake
 from spiderweb.connection import Connection
 from spiderweb.errors import AmpError
 from spiderweb.protocol.dump import DUMP_CHUNK_LENGTH
+from spiderweb.protocol.packing import unpack
 from spiderweb.protocol.parameters import BY_NAME, DUMP_RECORDS, PARAMETERS, Parameter
-
-
-def unpack(msg):
-    """ The dump's 7-bit packing (protocol.md section 3): in each group of 8 from msg[12],
-    the first byte holds the top bits, most significant first (data byte k takes 0x40 >> k). """
-    body, out = msg[12:-1], bytearray()
-    for g in range(0, len(body), 8):
-        group = body[g:g + 8]
-        for k, b in enumerate(group[1:]):
-            out.append(b | (0x80 if group[0] & (0x40 >> k) else 0))
-    return bytes(out)
 
 PRESETS = (4, 8, 0, 14)          # Chime 1: Class-A, Jungle $lash, Bass, Ambient 1: Black Hole
 DEFAULT_PARAMS = ("gain", "drive", "volume", "reverb", "reverb mix", "stomp on", "stomp knob")

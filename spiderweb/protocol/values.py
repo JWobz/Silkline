@@ -1,4 +1,7 @@
-"""The five value bytes of sets and reports (protocol.md sections 7 and 8).
+"""
+values.py
+
+The five value bytes of sets and reports (protocol.md sections 7 and 8).
 
 A float is sent as its top 16 bits, split so no byte is above 0x7F; an on/off
 as 01 / 00. Reports put the same top bits in a slightly different place.

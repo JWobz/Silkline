@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 
 from spiderweb.protocol.messages import MessageKind, classify
-from spiderweb.protocol.presets import unpack
+from spiderweb.protocol.packing import unpack
 from spiderweb.service import EventType
 
 CAPTURES = Path(__file__).resolve().parent.parent / "captures"

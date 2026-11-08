@@ -11,28 +11,10 @@ which preset it's for, so it is matched to the request it answers by handshake
 line; the message counters drift, so they can't be used.
 """
 
+from spiderweb.protocol.packing import unpack
+
 # Presets the amp lists but won't load: selecting them never sends a dump (protocol.md section 8).
 UNLOADABLE = {115}
-
-
-def unpack(msg):
-    """Undoes the amp's 7-bit packing of msg[12:-1] and returns the data bytes.
-
-    SysEx bytes can't have their top bit set, so the amp packs 7 data bytes
-    into each group of 8: the group's first byte holds their top bits, bit k
-    for data byte k. The last group can be shorter. The F7 that ends the
-    message isn't data.
-    """
-    body = msg[12:-1]  # removes header
-    out = bytearray()
-    for start in range(0, len(body), 8):
-        group = body[start : start + 8]
-        tops = group[0]
-        for k, b in enumerate(group[1:]):
-            if tops & (0x40 >> k):
-                b = b | 0x80
-            out.append(b)
-    return bytes(out)
 
 
 def preset_list_request(msg):

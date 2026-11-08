@@ -29,7 +29,7 @@ from pathlib import Path
 from spiderweb.amp import Amp, load_handshake
 from spiderweb.connection import Connection
 from spiderweb.protocol.parameters import BY_NAME
-from spiderweb.protocol.messages import is_set_answer
+from spiderweb.protocol.messages import _is_set_answer
 from tools.dump_params import dump_data
 
 DRIVE, DRIVE_ALT = BY_NAME["drive"], BY_NAME["drive (alt)"]
@@ -67,7 +67,7 @@ class SetPace:
 
     def on_raw(self, msg):
         self.write(f"raw {len(msg):3} {msg.hex()}", show=False)
-        if is_set_answer(msg):
+        if _is_set_answer(msg):
             with self.arrived:
                 self.answers.append(time.time())
                 self.arrived.notify_all()

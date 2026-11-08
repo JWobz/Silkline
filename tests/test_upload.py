@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 
 from spiderweb.protocol.dump import DumpCollector, preset_data
-from spiderweb.protocol.presets import unpack
-from spiderweb.protocol.upload import EDIT_BUFFER, build_upload, pack, upload_message
+from spiderweb.protocol.packing import pack, unpack, unpack_data
+from spiderweb.protocol.upload import EDIT_BUFFER, build_upload, _upload_message
 from tests.helpers import chime_dump
 
 WINDOWS = Path(__file__).parent.parent / "captures" / "windows"
@@ -69,9 +69,27 @@ class TestPack(unittest.TestCase):
         self.assertEqual(unpack(msg)[:len(data)], data)
 
 
+class TestUnpackData(unittest.TestCase):
+    """ unpack_data(msg): unpack, then cut to the real length in msg[10:12] (length - 1). """
+
+    def test_cuts_to_the_length_in_the_message(self):
+        # A 203-byte piece is padded to 29 groups (203 is a whole number of groups),
+        # a 5-byte one to one group of 7: the padding must go.
+        for length in (5, 16, 203, 210):
+            with self.subTest(length=length):
+                data = bytes(range(length))
+                self.assertEqual(unpack_data(_upload_message(0, 0, data)), data)
+
+    def test_a_full_dump_chunk_keeps_256(self):
+        collector_chunks = [m for m in chime_dump() if len(m) == 309]
+        self.assertEqual(len(unpack_data(collector_chunks[0])), 256)
+
+    def test_matches_unpack_then_cut(self):
+        msg = _upload_message(0x39, 1, bytes(range(200)))
+        self.assertEqual(unpack_data(msg), unpack(msg)[:200])
 class TestUploadMessage(unittest.TestCase):
     def test_framing(self):
-        msg = upload_message(0x39, 2, bytes(210))
+        msg = _upload_message(0x39, 2, bytes(210))
         self.assertEqual(msg[:7], bytes.fromhex("f000010c22054d"))
         self.assertEqual(msg[7:12], bytes([0x01, 0x39, 2, 0x0D, 0x01]))   # 209 = 0xD1
         self.assertEqual(msg[-1], 0xF7)
@@ -80,7 +98,7 @@ class TestUploadMessage(unittest.TestCase):
     def test_the_length_halves(self):
         for length, halves in ((210, (0x0D, 0x01)), (203, (0x0C, 0x0A)), (16, (0x00, 0x0F)), (256, (0x0F, 0x0F))):
             with self.subTest(length=length):
-                self.assertEqual(tuple(upload_message(0, 0, bytes(length))[10:12]), halves)
+                self.assertEqual(tuple(_upload_message(0, 0, bytes(length))[10:12]), halves)
 
 
 class TestBuildUpload(unittest.TestCase):

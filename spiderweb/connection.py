@@ -1,4 +1,7 @@
-"""The connection to the amp: the handshake, one reader thread, and requests.
+"""
+connection.py
+
+The connection to the amp: the handshake, one reader thread, and requests.
 
 Connection owns the transport. open() sends the handshake; then a reader thread
 (amp-reader) reads everything. A message goes to the waiting request's collector
@@ -16,7 +19,7 @@ from spiderweb.transport import AmpTransport, find_device
 
 
 @dataclass
-class Pending:
+class _Pending:
     """The request waiting for its reply: what collects it, until when, and who to tell."""
     collector: object
     deadline: float
@@ -32,9 +35,7 @@ class Connection:
     amp stops answering (a read or a send fails) the on_lost callbacks run once.
     """
 
-    def __init__(
-        self, handshake_lines, transport_factory=lambda: AmpTransport(find_device())
-    ):
+    def __init__(self, handshake_lines, transport_factory=lambda: AmpTransport(find_device())):
         self._logger = Logger(prefix="Connection")
         self._handshake_lines = handshake_lines
         self._transport_factory = transport_factory
@@ -158,7 +159,7 @@ class Connection:
         self._request_lock.acquire()
         bell = threading.Event()
         with self._pending_lock:
-            note = Pending(collector, time.time() + timeout, lambda c: bell.set())
+            note = _Pending(collector, time.time() + timeout, lambda c: bell.set())
             self._pending = note
         for i, msg in enumerate(msgs):
             if i and gap:
@@ -183,7 +184,7 @@ class Connection:
         """
         if not self._request_lock.acquire(blocking=False):
             return False
-        note = Pending(collector, time.time() + timeout, on_done)
+        note = _Pending(collector, time.time() + timeout, on_done)
         with self._pending_lock:
             self._pending = note
         for msg in msgs:

@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from spiderweb.protocol.models import CAB_MICS, load_model_names, model_name
+from spiderweb.protocol.models import _CAB_MICS, _load_model_names, _model_name
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_DATA = ROOT / "app_data"      # the Line 6 app's res folder, copied here (never in git)
@@ -36,29 +36,29 @@ class TestLoadModelNames(MadeUpFolder):
             "amps.models": [model("DoubleVerb", "1965 Double Verb"), model("JazzClean", "1987 Jazz Clean")],
             "stomps.models": [model("FuzzPi", "Fuzz Pi")],
         })
-        self.assertEqual(load_model_names(folder), {
+        self.assertEqual(_load_model_names(folder), {
             "DoubleVerb": "1965 Double Verb", "JazzClean": "1987 Jazz Clean", "FuzzPi": "Fuzz Pi"})
 
     def test_the_full_name_not_the_short_one(self):
         folder = self.folder({"amps.models": [model("DoubleVerb", "1965 Double Verb", shortname="Double Verb")]})
-        self.assertEqual(load_model_names(folder)["DoubleVerb"], "1965 Double Verb")
+        self.assertEqual(_load_model_names(folder)["DoubleVerb"], "1965 Double Verb")
 
     def test_only_models_files(self):
         folder = self.folder({"amps.models": [model("A", "a")], "default_preset.json": [model("B", "b")]})
-        self.assertEqual(load_model_names(folder), {"A": "a"})
+        self.assertEqual(_load_model_names(folder), {"A": "a"})
 
     def test_names_with_quotes_and_accents(self):
         folder = self.folder({"cabs.models": [model("4x12Green25sStudio", "4x12 Green 25's"),
                                               model("Cafe", "Café")]})
-        names = load_model_names(folder)
+        names = _load_model_names(folder)
         self.assertEqual((names["4x12Green25sStudio"], names["Cafe"]), ("4x12 Green 25's", "Café"))
 
     def test_takes_a_path_too(self):
         folder = self.folder({"amps.models": [model("A", "a")]})
-        self.assertEqual(load_model_names(Path(folder)), {"A": "a"})
+        self.assertEqual(_load_model_names(Path(folder)), {"A": "a"})
 
     def test_an_empty_folder(self):
-        self.assertEqual(load_model_names(self.folder({})), {})
+        self.assertEqual(_load_model_names(self.folder({})), {})
 
 
 class TestModelName(unittest.TestCase):
@@ -66,24 +66,24 @@ class TestModelName(unittest.TestCase):
              "4x12TreadplateStudio": "4x12 Treadplate"}
 
     def test_a_model(self):
-        self.assertEqual(model_name("DoubleVerb", self.NAMES), "1965 Double Verb")
+        self.assertEqual(_model_name("DoubleVerb", self.NAMES), "1965 Double Verb")
 
     def test_a_cab_with_each_mic(self):
-        for mic in CAB_MICS:
+        for mic in _CAB_MICS:
             with self.subTest(mic=mic):
-                self.assertEqual(model_name("2x12ClassAStudio" + mic, self.NAMES), "2x12 Class A")
+                self.assertEqual(_model_name("2x12ClassAStudio" + mic, self.NAMES), "2x12 Class A")
 
     def test_an_unknown_model_is_none(self):
-        self.assertIsNone(model_name("SpiderVGuitarFlow", self.NAMES))
+        self.assertIsNone(_model_name("SpiderVGuitarFlow", self.NAMES))
 
     def test_a_mic_ending_is_only_cut_when_the_rest_is_a_cab(self):
-        self.assertIsNone(model_name("Something421", self.NAMES))
+        self.assertIsNone(_model_name("Something421", self.NAMES))
 
     def test_an_unknown_cab_is_none(self):
-        self.assertIsNone(model_name("9x9NowhereStudio57OnAxis", self.NAMES))
+        self.assertIsNone(_model_name("9x9NowhereStudio57OnAxis", self.NAMES))
 
     def test_an_empty_table(self):
-        self.assertIsNone(model_name("DoubleVerb", {}))
+        self.assertIsNone(_model_name("DoubleVerb", {}))
 
 
 @unittest.skipUnless((APP_DATA / "amps.models").exists(), "app_data/ isn't here (the Line 6 app's files are never in git)")
@@ -92,7 +92,7 @@ class TestTheRealFiles(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.names = load_model_names(APP_DATA)
+        cls.names = _load_model_names(APP_DATA)
 
     def test_261_models(self):
         # 11 files, no model in two of them
@@ -117,11 +117,11 @@ class TestTheRealFiles(unittest.TestCase):
                              ("4x12BritT75StudioU67", "4x12 Brit T75"),
                              ("4x12TreadplateStudio421", "4x12 Treadplate")):
             with self.subTest(symbol=symbol):
-                self.assertEqual(model_name(symbol, self.names), name)
+                self.assertEqual(_model_name(symbol, self.names), name)
 
     def test_the_panel_and_air_have_no_name(self):
-        self.assertIsNone(model_name("SpiderVGuitarFlow", self.names))
-        self.assertIsNone(model_name("TNGAIRReflections", self.names))
+        self.assertIsNone(_model_name("SpiderVGuitarFlow", self.names))
+        self.assertIsNone(_model_name("TNGAIRReflections", self.names))
 
 
 if __name__ == "__main__":

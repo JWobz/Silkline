@@ -1,4 +1,7 @@
-"""The Line 6 app's symbol table: the amp's numbers for models and amp knobs, as names.
+"""
+symbols.py
+
+The Line 6 app's symbol table: the amp's numbers for models and amp knobs, as names.
 
 protocol.md section 10. The file is the app's own (never committed); see load_symbols.
 """

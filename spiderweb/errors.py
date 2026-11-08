@@ -1,5 +1,5 @@
 """
- errors.py
+errors.py
 
 Contains the error classes for Amp
 """

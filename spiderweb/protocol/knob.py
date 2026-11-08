@@ -1,4 +1,8 @@
-"""The preset knob: settling its position after a click (protocol.md section 11)."""
+"""
+knob.py
+
+The preset knob: settling its position after a click (protocol.md section 11).
+"""
 
 POSITIONS = 16
 
@@ -16,13 +20,13 @@ def settle_position(candidates, previous):
     if previous is None:
         return candidates[-1]
     for position in reversed(candidates):
-        for option in (position, complement_position(position)):
+        for option in (position, _complement_position(position)):
             if (option - previous) % POSITIONS in (1, POSITIONS - 1):
                 return option
     return candidates[-1]
 
 
-def complement_position(position):
+def _complement_position(position):
     """The position a bounced reading of `position` would give (raw value XOR 0x0F)."""
     raw = (position + 8) % POSITIONS
     return ((raw ^ 0x0F) - 8) % POSITIONS

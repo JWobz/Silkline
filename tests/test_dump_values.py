@@ -1,8 +1,8 @@
 """Reading parameter values from a preset dump (protocol.md section 3, "The dump's layout").
 
 The API these expect (spiderweb/protocol/dump.py):
-  DumpCollector.stream() -> bytes   each full chunk unpacked, first 256 bytes kept, joined
-  records(stream) -> {(block, sub, record_id): value}   float for type 03, int otherwise
+  DumpCollector.data() -> bytes     each chunk unpacked and cut to its length, joined
+  records(data) -> {(block, sub, record_id): value}     float for type 03, int otherwise
   read_values(dump) -> {(block, id, sub): value}         wire keys, as in parameters.py
 
 The dumps are real: Chime from captures/chime_Drive.txt (taken after "set drive 0.9"),
@@ -11,7 +11,7 @@ read with the reference parser in tools/dump_params.py.
 """
 import unittest
 
-from spiderweb.protocol.dump import DumpCollector, block_models, read_values, records, stage_models
+from spiderweb.protocol.dump import DumpCollector, block_models, _find_blocks, read_values, records, stage_models
 from spiderweb.protocol.parameters import BY_NAME
 from tests.helpers import chime_dump, preset_select_section
 
@@ -48,33 +48,37 @@ def selected(value):
     return collect(preset_select_section("preset_select_2.txt", value))
 
 
-class TestStream(unittest.TestCase):
-    def test_a_whole_dump_is_five_chunks_of_256(self):
-        self.assertEqual(len(chime().stream()), 5 * 256)
+class TestData(unittest.TestCase):
+    def test_each_chunk_cut_to_its_length(self):
+        dump = chime()
+        self.assertEqual(len(dump.data()), sum((c[10] << 4 | c[11]) + 1 for c in dump.chunks))
+        self.assertEqual(len(dump.chunks), 6)
 
-    def test_a_short_dump_has_fewer_chunks(self):
-        # Vibe 1: Auto Wah ends at chunk 4 (277 bytes), so only 4 full chunks.
-        self.assertEqual(len(selected(12).stream()), 4 * 256)
+    def test_a_short_dump_keeps_its_last_chunk(self):
+        # Vibe 1: Auto Wah ends at chunk 4 (277 bytes): 4 full chunks of 256, and the rest.
+        vibe = selected(12)
+        self.assertEqual(len(vibe.chunks), 5)
+        self.assertGreater(len(vibe.data()), 4 * 256)
 
-    def test_the_name_is_in_the_stream(self):
-        self.assertIn(b"Chime 1: Class-A", chime().stream())
+    def test_the_name_is_in_the_data(self):
+        self.assertIn(b"Chime 1: Class-A", chime().data())
 
 
 class TestRecords(unittest.TestCase):
     def test_the_amp_block(self):
-        r = records(chime().stream())
+        r = records(chime().data())
         self.assertAlmostEqual(r[(0x2A, 0, 0x1F)], 0.9004, places=3)     # Drive, after "set drive 0.9"
         self.assertAlmostEqual(r[(0x2A, 0, 0x1E)], 0.5569, places=3)
         self.assertAlmostEqual(r[(0x2A, 0, 0x1C)], 0.4431, places=3)
 
     def test_the_panel_block(self):
-        r = records(chime().stream())
+        r = records(chime().data())
         self.assertAlmostEqual(r[(0x74, 3, 0x3C)], 0.5922, places=3)     # Volume
         self.assertEqual(r[(0x74, 3, 0x26)], 1.0)                        # FX knob 1
         self.assertEqual(len([k for k in r if k[:2] == (0x74, 3)]), 25)
 
     def test_whole_numbers_are_ints(self):
-        r = records(chime().stream())
+        r = records(chime().data())
         self.assertEqual(r[(0x74, 3, 0x28)], 0)                          # FX1 off
         self.assertEqual(r[(0x74, 3, 0x2B)], 1)
         self.assertIsInstance(r[(0x74, 3, 0x2B)], int)
@@ -82,17 +86,17 @@ class TestRecords(unittest.TestCase):
 
     def test_the_same_record_id_in_two_blocks(self):
         # Record ids are numbered per block: 0x1F is the amp's Drive and something else in 19:3.
-        r = records(chime().stream())
+        r = records(chime().data())
         self.assertAlmostEqual(r[(0x19, 3, 0x1F)], 0.6027, places=3)
         self.assertAlmostEqual(r[(0x2A, 0, 0x1F)], 0.9004, places=3)
 
     def test_every_block_is_found(self):
-        blocks = {key[:2] for key in records(chime().stream())}
+        blocks = {key[:2] for key in records(chime().data())}
         self.assertEqual(blocks, {(0x74, 3), (0x5E, 2), (0x04, 3), (0x0C, 3), (0x19, 3), (0x1B, 3),
                                   (0x1D, 3), (0x1F, 3), (0x2A, 0), (0x21, 3), (0x23, 3), (0x25, 3)})
 
     def test_a_short_dump_gives_the_blocks_it_has(self):
-        r = records(selected(12).stream())
+        r = records(selected(12).data())
         self.assertAlmostEqual(r[(0x74, 3, 0x3C)], 0.6268, places=3)
         self.assertAlmostEqual(r[(0x2A, 0, 0x33)], 0.57, places=3)
 
@@ -152,6 +156,40 @@ class TestReadValues(unittest.TestCase):
         self.assertEqual(read_values(DumpCollector()), {})
 
 
+class TestFindBlocks(unittest.TestCase):
+    """ _find_blocks(data): every block start, as (block, sub, model, count, start), in
+    order. records() and block_models() are built on it. """
+
+    def test_chime(self):
+        blocks = _find_blocks(chime().data())
+        self.assertEqual(len(blocks), 13)
+        block, sub, model, count, start = blocks[0]
+        self.assertEqual((block, sub, model, count), (0x74, 3, 0x316, 25))      # the panel
+        self.assertEqual([(b, s) for b, s, *_ in blocks][:3], [(0x74, 3), (0x5E, 2), (0x04, 3)])
+
+    def test_start_is_the_first_record(self):
+        # Right after the three 10-byte info records (03, 05, 06).
+        data = chime().data()
+        for block, sub, model, count, start in _find_blocks(data):
+            with self.subTest(block=hex(block)):
+                self.assertEqual([data[start - 30], data[start - 20], data[start - 10]], [3, 5, 6])
+
+    def test_agrees_with_block_models_and_records(self):
+        data = chime().data()
+        blocks = _find_blocks(data)
+        self.assertEqual({(b, s): m for b, s, m, _, _ in blocks}, block_models(data))
+        # every block records() read from is one _find_blocks found (a block with no records has none)
+        self.assertLessEqual({(b, s) for b, s, _ in records(data)}, {(b, s) for b, s, *_ in blocks})
+
+    def test_a_made_up_block(self):
+        info = (bytes([3, 0, 0, 0x80, 7, 0]) + (0x2A).to_bytes(4, "little")
+                + bytes([5, 0, 0, 0x80, 7, 0]) + (0xCA).to_bytes(4, "little")
+                + bytes([6, 0, 0, 0x80, 7, 0]) + (2).to_bytes(4, "little"))
+        self.assertEqual(_find_blocks(b"junk" + info), [(0x2A, 0, 0xCA, 2, 34)])
+
+    def test_nothing(self):
+        self.assertEqual(_find_blocks(b""), [])
+        self.assertEqual(_find_blocks(bytes(300)), [])
 class TestBlockModels(unittest.TestCase):
     """ block_models(data): each block's model number, from the 05 info record at its
     start (protocol.md section 3, "The dump's layout"). """
@@ -169,9 +207,8 @@ class TestBlockModels(unittest.TestCase):
                 self.assertEqual(set(block_models(selected(value).data())), expected)
 
     def test_the_last_chunk_counts(self):
-        # Vibe 1's last three blocks are in its short last chunk, which stream() leaves out.
+        # Vibe 1's last three blocks are in its short last chunk; data() keeps it.
         vibe = selected(12)
-        self.assertEqual(len(block_models(vibe.stream())), 10)
         self.assertEqual(len(block_models(vibe.data())), 13)
 
     def test_a_made_up_block(self):

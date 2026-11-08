@@ -1,6 +1,12 @@
 """
 amp.py
 
+The amp's commands, on top of one Connection: connect, sets, preset selects,
+dumps and uploads (protocol.md sections 2 to 8).
+
+Amp knows how to build each request and what answer to wait for. It keeps the
+set counter (seq) and the upload counter, and lets one set or upload through at
+a time. AmpService is its only user; nothing above it talks to the amp directly.
 """
 
 import threading
@@ -14,7 +20,6 @@ from spiderweb.protocol.messages import (
     DUMP_REQUEST,
     FIRST_SEQUENCE,
     FLOAT_VALUE,
-    SWITCH_VALUE,
     SetAnswer,
     UploadAnswer,
     build_begin_message,
@@ -97,7 +102,7 @@ class Amp:
             self._upload_seq = (self._upload_seq + 2) % 128
             self._connection.request(msgs, UploadAnswer(), UPLOAD_TIMEOUT, gap=0.01)
 
-    def set_raw(self, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1):
+    def _set_raw(self, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1):
         """Sets a parameter to a raw five-byte value (protocol.md section 8).
 
         block, sub, param_id and namespace say which parameter (see
@@ -132,13 +137,13 @@ class Amp:
     def set_parameter(self, param, value):
         """Sets a Parameter (from protocol.parameters) to a value (see Parameter.encode).
 
-        Returns once the amp has answered (see set_raw). Raises ValueError, and
+        Returns once the amp has answered (see _set_raw). Raises ValueError, and
         sends nothing, if the parameter can't be set or the value is out of range.
         """
         if not param.settable:
             raise ValueError(f"Parameter {param.name} is not settable.")
         raw5, value_type = param.encode(value)
-        self.set_raw(param.block, param.sub, param.id , raw5, param.namespace, value_type)
+        self._set_raw(param.block, param.sub, param.id , raw5, param.namespace, value_type)
 
     def refresh_preset(self, on_done, timeout=DUMP_TIMEOUT):
         """Asks for the current preset's dump without waiting for it.

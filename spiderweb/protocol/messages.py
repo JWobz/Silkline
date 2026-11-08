@@ -1,8 +1,7 @@
 """
 messages.py
 
-Handles the messages that is sent and recieved from amp and machine
-
+Handles the messages that are sent and received between the amp and the machine
 """
 
 from enum import Enum
@@ -39,7 +38,7 @@ class MessageKind(Enum):
     STATUS = "status"
 
 
-def is_set_answer(msg):
+def _is_set_answer(msg):
     """The 29-byte channel-0 message the amp sends straight after a set (protocol.md section 8)."""
     return (
         len(msg) == 29
@@ -50,7 +49,7 @@ def is_set_answer(msg):
     )
 
 
-def is_upload_answer(msg):
+def _is_upload_answer(msg):
     """The 29-byte channel-1 message the amp sends after the last piece of an upload."""
     return (
         len(msg) == 29
@@ -68,8 +67,8 @@ class SetAnswer:
         self.msg = None
 
     def offer(self, msg):
-        """Takes the first set answer (is_set_answer). True if it took msg."""
-        if self.msg is None and is_set_answer(msg):
+        """Takes the first set answer (_is_set_answer). True if it took msg."""
+        if self.msg is None and _is_set_answer(msg):
             self.msg = msg
             return True
         return False
@@ -86,8 +85,8 @@ class UploadAnswer:
         self._done = False
 
     def offer(self, msg):
-        """Takes the upload's answer (is_upload_answer). True if it took msg."""
-        if is_upload_answer(msg):
+        """Takes the upload's answer (_is_upload_answer). True if it took msg."""
+        if _is_upload_answer(msg):
             self._done = True
             return True
         return False
@@ -148,9 +147,7 @@ def build_begin_message(sequence):
     return message
 
 
-def build_set_message(
-    sequence, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1
-):
+def build_set_message(sequence, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1):
     """Build a SysEx message that sets a parameter to a raw five-byte value.
 
     block and sub go in msg[13] and msg[14], param_id and namespace in msg[17]

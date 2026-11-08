@@ -1,7 +1,7 @@
 """Phase 4 tests: AmpService on top of a real Amp and Connection.
 
 The amp is the FakeTransport from helpers.py, answering with real
-captures. handle_message itself is tested in test_service_handler.py.
+captures. _handle_message itself is tested in test_service_handler.py.
 """
 import json
 import tempfile
