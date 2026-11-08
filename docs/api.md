@@ -5,14 +5,14 @@ and the tools talk to it only. Everything below `AmpService` (`Amp`, `Connection
 `AmpTransport`, `spiderweb/protocol/`) is internal. The wire format is in
 `docs/protocol.md`.
 
-Updated 2026-11-07, after phase 6, reading values from dumps, the drive pick and
-`set_latest`, and leaving out preset 115. 350 tests (`python3 -m unittest`).
+Updated 2026-11-08: real parameter names, on/off switches, `save()` and each stage's model.
+404 tests (`python3 -m unittest`).
 
 ## Starting and stopping
 
 | Call | What it does |
 |---|---|
-| `AmpService(amp_factory=default_amp, reconnect_delays=(1, 2, 5, 10, 30))` | Makes the service. Touches nothing until started. |
+| `AmpService(amp_factory=default_amp, reconnect_delays=(1, 2, 5, 10, 30), resource_folder=APP_DATA_FOLDER)` | Makes the service. Touches nothing on the amp until started. Reads the Line 6 app's files from `resource_folder` (see Model names below); without them models have numbers only. |
 | `keep_connected()` | **What the server uses.** Returns at once; an `amp-supervisor` thread connects, and reconnects after any loss: unplug, power-cycle, or a set the amp didn't answer. Waits `reconnect_delays` between failed tries (the last repeats). |
 | `start()` | One connect and handshake (about 15 s). Raises `AmpNotFound` (no amp), `AmpError` (the amp isn't ready: no preset list straight after power-on), or `OSError`. For tools and tests. |
 | `stop()` | Ends `keep_connected()`, closes the amp, ends `DISCONNECTED`. Safe any time. |
@@ -48,6 +48,7 @@ an unknown or unsettable parameter, or a value out of range.
 | `preset_name` | from the handshake dump, `select_preset()`, or the refresh after a knob move |
 | `knob_position` | 0 to 15, once the preset knob has settled (the knob's marking 16 is 0) |
 | `params` | `{(block, id, namespace): value}`: read from each dump (`read_values`, protocol.md section 3), then updated by sets and knob reports. Replaced on every select, knob click and reconnect. On/off switches are 0 or 1 |
+| `models` | `{stage: {"number": n, "id": str or None, "name": str or None}}` for the 11 stages (`"gate"`, `"vol"`, `"wah"`, `"stomp"`, `"mod"`, `"delay"`, `"reverb"`, `"amp"`, `"cab"`, `"comp"`, `"eq"`), from every dump, like `params`. See Model names below |
 | `bpm` | from the tap button |
 
 ## Events
@@ -92,6 +93,23 @@ Names are any case. Floats are 0 to 1 unless a range is given.
 
 Not yet: knobs that change with a stage's model (wah, stomp, mod, delay), changing a
 stage's model, moving stages, and saving to another slot (v1.1, protocol.md section 8).
+
+## Model names
+
+Each stage's model comes from every dump as a number (the amp block's 0xDC, say). The
+Line 6 Spider V Remote app's own files turn it into a name: `"id"` from its symbol
+table (`ClassA30TopBoost`) and `"name"` from its `.models` files ("1967 Class A-30 Top
+Boost"; a cab's name leaves out its mic).
+
+**Those files are Line 6's, so they are never in git** (`.gitignore` has `app_data/`).
+To get names, install the free Spider V Remote app and copy its `res` folder to
+`app_data/` in the project:
+```
+scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" pi@raspberrypi:~/SpiderWeb-Amp/app_data
+```
+Without the folder the service still works: a warning is logged and `"id"` and `"name"`
+are `None`. Stages people can't pick (the panel, 74:3, and 21:3) are left out.
+
 
 ## Gain and Drive
 

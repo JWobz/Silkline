@@ -1,3 +1,7 @@
+"""What AmpService knows and tells: AmpState, the Event it sends, and their kinds.
+
+Plain data only; nothing here talks to the amp.
+"""
 from dataclasses import dataclass, field, replace
 from enum import Enum
 
@@ -38,7 +42,10 @@ class AmpState:
     preset_number is the select value of the last select_preset(); it goes back
     to None when the preset knob moves, because which value each knob position
     loads isn't known (protocol.md section 11). params maps a parameter key
-    (block, id, sub) to its last reported value, 0 to 1.
+    (block, id, namespace) to its last value: a float, or 0 / 1 for a switch.
+    models maps each stage ("amp", "cab", "stomp"...) to its model,
+    {"number": n, "id": str or None, "name": str or None}; both are replaced
+    from every dump.
     """
 
     connection: ConnectionState = ConnectionState.DISCONNECTED
@@ -46,11 +53,12 @@ class AmpState:
     preset_name: str | None = None
     knob_position: int | None = None
     params: dict = field(default_factory=dict)
+    models: dict = field(default_factory=dict)
     bpm: float | None = None
 
     def snapshot(self):
         """Returns a copy, params included, that is safe to keep and change."""
-        return replace(self, params=self.params.copy())
+        return replace(self, params=self.params.copy(), models=self.models.copy())
 
 
 @dataclass(frozen=True)

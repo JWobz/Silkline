@@ -1,3 +1,7 @@
+"""The raw MIDI device: finding the amp, and reading and writing whole SysEx messages.
+
+The lowest layer; Connection is the only user.
+"""
 import os
 import select
 import time

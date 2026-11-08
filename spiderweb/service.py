@@ -17,18 +17,27 @@ _threading_lock guards the state. Events are only sent outside _threading_lock.
 """
 
 import threading
+from pathlib import Path
 
 from spiderweb.amp import Amp, load_handshake
 from spiderweb.connection import Connection
 from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
 from spiderweb.logger import Logger
-from spiderweb.protocol.dump import DumpCollector, preset_data, read_values
+from spiderweb.protocol.dump import (
+    DumpCollector,
+    preset_data,
+    read_values,
+    stage_models,
+)
 from spiderweb.protocol.knob import settle_position
 from spiderweb.protocol.messages import MessageKind, classify
+from spiderweb.protocol.models import load_model_names, model_name
 from spiderweb.protocol.parameters import BY_NAME, KNOWN_PARAMETERS
 from spiderweb.protocol.presets import UNLOADABLE, preset_list_request, preset_names
+from spiderweb.protocol.symbols import load_symbols
 from spiderweb.state import AmpState, ConnectionState, Event, EventType
 
+APP_DATA_FOLDER = Path(__file__).resolve().parent.parent / "app_data"   # the Line 6 app's res folder, never committed
 RECONNECT_DELAYS = (1, 2, 5, 10, 30)   # seconds between failed connects; the last one repeats
 GAIN = BY_NAME["gain"]
 DRIVE = BY_NAME["drive"]
@@ -43,12 +52,16 @@ class AmpService:
     amp_factory makes a new Amp for every start(); tests pass one that builds
     an Amp on a fake transport. reconnect_delays are the waits between failed
     connects in keep_connected(), with the last one repeated; tests pass short ones.
+    resource_folder holds the Line 6 app's files (its res folder, protocol.md
+    section 10), which name each stage's model in state().models. Without them
+    (a missing folder is logged, or None) models have numbers only.
     """
 
-    def __init__(self, amp_factory=default_amp, reconnect_delays=RECONNECT_DELAYS):
+    def __init__(self, amp_factory=default_amp, reconnect_delays=RECONNECT_DELAYS, resource_folder=APP_DATA_FOLDER):
         self._logger = Logger(prefix="AmpService")
         self._state = AmpState()
         self._amp = None
+        self._resource_folder = None
         self.amp_factory = amp_factory
         self._threading_lock = threading.Lock()
         self._lifecycle_lock = threading.Lock()
@@ -63,6 +76,16 @@ class AmpService:
         self._pending = {}                      # set_latest: param key -> (param, value) not sent yet
         self._pending_lock = threading.Lock()
         self._draining = False                  # True while a set_latest caller is sending
+        self._symbols = []
+        self._model_names = {}
+
+        if resource_folder is not None:
+            self._resource_folder = Path(resource_folder)
+        if self._resource_folder is not None:
+            try: self._symbols = load_symbols(self._resource_folder / "defaultSymbolTable_Parker.bin")
+            except FileNotFoundError: self._logger.warning("Cannot find symbols file")
+            try: self._model_names = load_model_names(self._resource_folder) 
+            except FileNotFoundError: self._logger.warning("Cannot find models file")
 
     def set_connection(self, new_state: ConnectionState):
         """Records the connection state and sends CONNECTION_CHANGED."""
@@ -112,8 +135,10 @@ class AmpService:
                     if collector.complete():
                         self._state.preset_name = collector.name()
                         self._state.params = read_values(collector)
+                        self._state.models = self._models(collector)
                     else:
                         self._state.params = {}
+                        self._state.models = {}
 
             except Exception:
                 if self._amp is not None:
@@ -183,6 +208,22 @@ class AmpService:
             self._wake.wait()
             self._wake.clear()
 
+    def _models(self, dump):
+        """Each stage's model in a dump: {stage: {"number", "id", "name"}}.
+
+        number is what the amp sends; id the symbol table's name for it and name
+        the .models files' name, each None without the Line 6 files (or for a
+        model they don't know).
+        """
+        models = {}
+        for stage, number in stage_models(dump).items():
+            symbol = name = None
+            if (number < len(self._symbols)):
+                symbol = self._symbols[number]
+                name = model_name(symbol, self._model_names)
+            models[stage] = {"number": number, "id": symbol, "name": name} 
+        return models
+    
     def _resolve(self, param):
         """The parameter a name really means: Gain and Drive are the same knob.
 
@@ -343,6 +384,7 @@ class AmpService:
             self._state.preset_number = n
             self._state.preset_name = name
             self._state.params = read_values(dump)
+            self._state.models = self._models(dump)
         self._emit(EventType.PRESET_CHANGED, {"number": n, "name": name})
         return name
 
@@ -450,6 +492,7 @@ class AmpService:
                 self._state.preset_name = name
                 self._state.preset_number = None
                 self._state.params = read_values(dump)
+                self._state.models = self._models(dump)
             self._emit(EventType.PRESET_CHANGED, {"number": None, "name": name})
         else:
             self._logger.warning("Preset dump is incomplete")

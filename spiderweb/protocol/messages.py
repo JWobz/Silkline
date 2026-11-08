@@ -1,9 +1,9 @@
 """
- messages.py
- 
- Handles the messages that is sent and recieved from amp and machine
- 
- """
+messages.py
+
+Handles the messages that is sent and recieved from amp and machine
+
+"""
 
 from enum import Enum
 
@@ -38,39 +38,62 @@ class MessageKind(Enum):
     PRESET_CHANGE = "preset_change"
     STATUS = "status"
 
+
 def is_set_answer(msg):
     """The 29-byte channel-0 message the amp sends straight after a set (protocol.md section 8)."""
-    return len(msg) == 29 and msg[:7] == HEADER and msg[7] == 0 and msg[11] == 0x0B and msg[13] == 0x01
+    return (
+        len(msg) == 29
+        and msg[:7] == HEADER
+        and msg[7] == 0
+        and msg[11] == 0x0B
+        and msg[13] == 0x01
+    )
+
 
 def is_upload_answer(msg):
     """The 29-byte channel-1 message the amp sends after the last piece of an upload."""
-    return len(msg) == 29 and msg[:7] == HEADER and msg[7] == 1 and msg[11] == 0x0B and msg[13] == 0x01
+    return (
+        len(msg) == 29
+        and msg[:7] == HEADER
+        and msg[7] == 1
+        and msg[11] == 0x0B
+        and msg[13] == 0x01
+    )
 
-class SetAnswer():
+
+class SetAnswer:
     """Collector for request(): complete once the amp has answered a set."""
+
     def __init__(self):
         self.msg = None
 
     def offer(self, msg):
+        """Takes the first set answer (is_set_answer). True if it took msg."""
         if self.msg is None and is_set_answer(msg):
             self.msg = msg
             return True
         return False
 
     def complete(self):
+        """True once the answer has arrived."""
         return self.msg is not None
-        
-class UploadAnswer():
+
+
+class UploadAnswer:
     """Collector for request(): complete once the upload's answer arrives."""
+
     def __init__(self):
         self._done = False
 
     def offer(self, msg):
+        """Takes the upload's answer (is_upload_answer). True if it took msg."""
         if is_upload_answer(msg):
             self._done = True
             return True
         return False
+
     def complete(self):
+        """True once the answer has arrived."""
         return self._done
 
 
@@ -125,7 +148,9 @@ def build_begin_message(sequence):
     return message
 
 
-def build_set_message(sequence, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1):
+def build_set_message(
+    sequence, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1
+):
     """Build a SysEx message that sets a parameter to a raw five-byte value.
 
     block and sub go in msg[13] and msg[14], param_id and namespace in msg[17]

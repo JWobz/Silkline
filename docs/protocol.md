@@ -688,9 +688,20 @@ in its header, and then read back slot 4, so it went over Chime 1 like the first
 Since the upload header carries the slot (below), save-as is very likely the same
 upload with another slot number. Untested.
 
-**Left for v1.1 (decided 2026-11-07):** type changes, stage moves and save-as. v1.0 has
-every knob and on/off, reads each stage's model and the chain, and saves to the current
-slot. Notes for v1.1:
+**Left for v1.1 (decided 2026-11-07 and 08):** type changes, stage moves, save-as, the
+chain order, and tone export / import. v1.0 has every knob and on/off, reads each
+stage's model (names from the Line 6 app's own files, loaded at start-up and never
+committed, section 10), and saves to the current slot. Notes for v1.1:
+
+- Tone export / import: first our own file (a dump's preset data, uploaded back to the
+  edit buffer, slot FF FF FF FF; a whole preset there is untested), then Line 6's tone
+  files (`.svl6p`, section 10; the app's Import / Export buttons, `exportDeviceTone` in
+  APIV3EngineDLL.dll). They name each stage's model and knobs
+  (`"amp": {"@model": "BritGainJ800", "Bass": 0.59, ...}`), so they convert to records
+  through the symbol table and the `.models` files. One file exported from this amp
+  would confirm the details. CustomTone (the Line 6 account's online sharing,
+  `customtone/tones` etc.) is left out: it's Line 6's private web service and needs the
+  user's login.
 
 - The app only lets a stage go into certain chain positions (seen by the user when
   dragging). Find out why before writing moves: likely fixed regions (before the amp,

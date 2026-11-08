@@ -1,3 +1,5 @@
+"""The preset knob: settling its position after a click (protocol.md section 11)."""
+
 POSITIONS = 16
 
 

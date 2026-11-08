@@ -11,7 +11,8 @@ read with the reference parser in tools/dump_params.py.
 """
 import unittest
 
-from spiderweb.protocol.dump import DumpCollector, read_values, records
+from spiderweb.protocol.dump import DumpCollector, block_models, read_values, records, stage_models
+from spiderweb.protocol.parameters import BY_NAME
 from tests.helpers import chime_dump, preset_select_section
 
 GAIN = (0x2A, 0x25, 0)
@@ -149,6 +150,74 @@ class TestReadValues(unittest.TestCase):
 
     def test_an_empty_collector_gives_nothing(self):
         self.assertEqual(read_values(DumpCollector()), {})
+
+
+class TestBlockModels(unittest.TestCase):
+    """ block_models(data): each block's model number, from the 05 info record at its
+    start (protocol.md section 3, "The dump's layout"). """
+
+    def test_chime_has_13_blocks(self):
+        blocks = block_models(chime().data())
+        self.assertEqual(len(blocks), 13)
+        self.assertEqual(blocks[(0x74, 3)], 0x316)      # the panel: SpiderVGuitarFlow
+        self.assertEqual(blocks[(0x21, 3)], 0)          # TNGAIRReflections
+
+    def test_every_preset_has_the_same_13_blocks(self):
+        expected = set(block_models(chime().data()))
+        for value in (0, 8, 12):
+            with self.subTest(preset=value):
+                self.assertEqual(set(block_models(selected(value).data())), expected)
+
+    def test_the_last_chunk_counts(self):
+        # Vibe 1's last three blocks are in its short last chunk, which stream() leaves out.
+        vibe = selected(12)
+        self.assertEqual(len(block_models(vibe.stream())), 10)
+        self.assertEqual(len(block_models(vibe.data())), 13)
+
+    def test_a_made_up_block(self):
+        info = (bytes([3, 0, 0, 0x80, 7, 0]) + (0x2A).to_bytes(4, "little")
+                + bytes([5, 0, 0, 0x80, 7, 0]) + (0xCA).to_bytes(4, "little")
+                + bytes([6, 0, 0, 0x80, 7, 0]) + (0).to_bytes(4, "little"))
+        self.assertEqual(block_models(b"junk" + info), {(0x2A, 0): 0xCA})
+
+    def test_nothing(self):
+        self.assertEqual(block_models(b""), {})
+        self.assertEqual(block_models(bytes(300)), {})
+
+
+class TestStageModels(unittest.TestCase):
+    """ stage_models(dump): {stage: model number} for the 11 stages people pick. """
+
+    STAGE_NAMES = {"gate", "vol", "wah", "stomp", "mod", "delay", "reverb", "amp", "cab", "comp", "eq"}
+
+    def test_chime(self):
+        self.assertEqual(stage_models(chime()), {
+            "gate": 0x25E, "vol": 0x304, "wah": 0x312, "stomp": 0x22B, "mod": 0x193, "delay": 0x1DE,
+            "reverb": 0x25C, "amp": 0xDC, "cab": 0x2C1, "comp": 0x261, "eq": 0x269})
+
+    def test_bass_and_vibe(self):
+        # Amps from the user's notes: Bass is the Tube Instrument Preamp (L6TubePreamp).
+        bass, vibe = stage_models(selected(0)), stage_models(selected(12))
+        self.assertEqual((bass["amp"], bass["stomp"], bass["reverb"]), (0xBF, 0x219, 0x258))
+        self.assertEqual((vibe["amp"], vibe["wah"], vibe["mod"]), (0xB2, 0x30B, 0x1A6))
+
+    def test_every_stage_every_time(self):
+        for dump in (chime(), selected(0), selected(8), selected(12)):
+            self.assertEqual(set(stage_models(dump)), self.STAGE_NAMES)
+
+    def test_the_fixed_stages_never_change(self):
+        for dump in (chime(), selected(0), selected(8), selected(12)):
+            m = stage_models(dump)
+            self.assertEqual((m["gate"], m["vol"], m["comp"], m["eq"]), (0x25E, 0x304, 0x261, 0x269))
+
+    def test_the_names_match_the_on_off_parameters(self):
+        # "Stomp On", "Comp On"... so a UI can pair a stage with its switch.
+        for stage in self.STAGE_NAMES - {"amp", "cab"}:
+            with self.subTest(stage=stage):
+                self.assertIn(f"{stage} on", BY_NAME)
+
+    def test_an_empty_dump(self):
+        self.assertEqual(stage_models(DumpCollector()), {})
 
 
 if __name__ == "__main__":

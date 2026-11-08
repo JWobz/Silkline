@@ -3,9 +3,12 @@
 The amp is the FakeTransport from helpers.py, answering with real
 captures. handle_message itself is tested in test_service_handler.py.
 """
+import json
+import tempfile
 import threading
 import time
 import unittest
+from pathlib import Path
 
 from spiderweb.amp import Amp
 from spiderweb.connection import Connection
@@ -22,6 +25,7 @@ from spiderweb.protocol.parameters import BY_NAME
 from spiderweb.protocol.values import decode_set_value, encode_set_value
 from spiderweb.protocol.dump import DumpCollector, preset_data
 from spiderweb.service import AmpService, ConnectionState, EventType
+from tests.test_symbols import make_table
 from tests.helpers import (
     ACOUSTIC,
     BASS_LONG,
@@ -78,8 +82,10 @@ class ServiceTest(unittest.TestCase):
     (handshake line 8); `dump` is what it sends for every later dump request.
     `preset_list` maps preset-list requests to the replies the amp sends for them;
     they go in the handshake ahead of the dump request, as in the real one.
+    `resource_folder` is where the Line 6 app's files are; None (the default) loads none,
+    so models have numbers only.
     """
-    def make(self, handshake_dump=(), dump=(), start=True, preset_list=None):
+    def make(self, handshake_dump=(), dump=(), start=True, preset_list=None, resource_folder=None):
         preset_list = preset_list or {}
         self.replies = AnswersDumps(handshake_dump, others=preset_list)
         self.fake = FakeTransport(auto_reply=self.replies)
@@ -90,7 +96,7 @@ class ServiceTest(unittest.TestCase):
             self.amps_made += 1
             return Amp(Connection(handshake, transport_factory=lambda: self.fake))
 
-        self.service = AmpService(amp_factory=factory)
+        self.service = AmpService(amp_factory=factory, resource_folder=resource_folder)
         self.events = Events()
         self.service.on_change(self.events)
         self.addCleanup(self.service.stop)
@@ -794,6 +800,92 @@ def collected(messages):
         collector.offer(msg)
     assert collector.complete()
     return collector
+
+
+APP_DATA = Path(__file__).resolve().parent.parent / "app_data"
+
+
+def made_up_app_data(folder):
+    """ A small app_data folder in `folder`: a symbol table naming Chime's and Bass's amp
+    and cab, and a .models file each for them. Enough to check the service end to end
+    without Line 6's files. """
+    names = [f"Symbol{i}" for i in range(0x317)]
+    names[0xDC], names[0xBF], names[0x2C1] = "ClassA30TopBoost", "L6TubePreamp", "2x12ClassAStudio57OnAxis"
+    (folder / "defaultSymbolTable_Parker.bin").write_bytes(make_table(names))
+    (folder / "amps.models").write_text(json.dumps([
+        {"symbolicID": "ClassA30TopBoost", "name": "1967 Class A-30 Top Boost"},
+        {"symbolicID": "L6TubePreamp", "name": "Tube Instrument Preamp"}]))
+    (folder / "cabs.models").write_text(json.dumps([{"symbolicID": "2x12ClassAStudio", "name": "2x12 Class A"}]))
+    return folder
+
+
+class TestModels(ServiceTest):
+    """ state().models: each stage's model, from every dump, named with the Line 6 app's
+    files when they're there (protocol.md section 10). """
+
+    STAGES = {"gate", "vol", "wah", "stomp", "mod", "delay", "reverb", "amp", "cab", "comp", "eq"}
+
+    def app_data(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return made_up_app_data(Path(tmp.name))
+
+    def test_the_handshake_dump_gives_every_stage(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), resource_folder=self.app_data())
+        self.assertEqual(set(service.state().models), self.STAGES)
+
+    def test_named_from_the_files(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), resource_folder=self.app_data())
+        models = service.state().models
+        self.assertEqual(models["amp"], {"number": 0xDC, "id": "ClassA30TopBoost", "name": "1967 Class A-30 Top Boost"})
+        self.assertEqual(models["cab"]["name"], "2x12 Class A")             # the mic is cut off
+
+    def test_a_model_the_files_dont_name(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), resource_folder=self.app_data())
+        gate = service.state().models["gate"]
+        self.assertEqual((gate["number"], gate["id"], gate["name"]), (0x25E, "Symbol606", None))
+
+    def test_no_files_gives_numbers_only(self):
+        service, fake, events = self.make(handshake_dump=chime_dump())          # resource_folder=None
+        self.assertEqual(service.state().models["amp"], {"number": 0xDC, "id": None, "name": None})
+
+    def test_a_missing_folder_is_fine(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(),
+                                          resource_folder=Path(tempfile.gettempdir()) / "no app_data here")
+        self.assertEqual(service.state().connection, ConnectionState.CONNECTED)
+        self.assertEqual(service.state().models["amp"]["id"], None)
+
+    def test_the_folder_can_be_text(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), resource_folder=str(self.app_data()))
+        self.assertEqual(service.state().models["amp"]["id"], "ClassA30TopBoost")
+
+    def test_select_replaces_them(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), dump=bass_dump(),
+                                          resource_folder=self.app_data())
+        service.select_preset(0)
+        self.assertEqual(service.state().models["amp"]["name"], "Tube Instrument Preamp")
+
+    def test_a_knob_refresh_replaces_them(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), dump=bass_dump())
+        fake.arrive(*first_click())
+        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PRESET_CHANGED))
+        self.assertEqual(service.state().models["amp"]["number"], 0xBF)
+
+    def test_no_handshake_dump_means_no_models(self):
+        service, fake, events = self.make()
+        self.assertEqual(service.state().models, {})
+
+    def test_a_copy(self):
+        service, fake, events = self.make(handshake_dump=chime_dump())
+        service.state().models.clear()
+        self.assertEqual(set(service.state().models), self.STAGES)
+
+    @unittest.skipUnless((APP_DATA / "amps.models").exists(), "app_data/ isn't here (the Line 6 app's files are never in git)")
+    def test_the_real_files(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), resource_folder=APP_DATA)
+        names = {stage: m["name"] for stage, m in service.state().models.items()}
+        self.assertEqual((names["amp"], names["gate"], names["cab"]),
+                         ("1967 Class A-30 Top Boost", "Noise Gate", "2x12 Class A"))
 
 
 if __name__ == "__main__":

@@ -1,3 +1,8 @@
+"""The five value bytes of sets and reports (protocol.md sections 7 and 8).
+
+A float is sent as its top 16 bits, split so no byte is above 0x7F; an on/off
+as 01 / 00. Reports put the same top bits in a slightly different place.
+"""
 import struct
 
 
@@ -15,9 +20,11 @@ def encode_set_value(value):
     flag = 0x40 if (third & 0x80) else 0x00
     return bytes([0x00, 0x00, flag, third & 0x7F, top])
 
+
 def encode_switch(on):
     """The five value bytes of an on/off set: 01 for on, 00 for off, then zeros."""
     return bytes([1 if on else 0, 0, 0, 0, 0])
+
 
 def decode_value(value):
     """Turn the five byte value into a float."""

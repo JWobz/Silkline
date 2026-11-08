@@ -9,3 +9,5 @@ venv/
 .vscode/
 
 login.json
+
+app_data/

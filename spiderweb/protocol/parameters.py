@@ -1,3 +1,9 @@
+"""The parameters the API can set and read, by name (protocol.md section 8).
+
+PARAMETERS lists them; BY_NAME finds one by its lower-case name and
+KNOWN_PARAMETERS names a wire key. DUMP_RECORDS says which dump record holds
+each one's value (protocol.md section 3).
+"""
 from dataclasses import dataclass
 
 from spiderweb.protocol.messages import FLOAT_VALUE, SWITCH_VALUE
@@ -28,6 +34,7 @@ class Parameter:
 
     @property
     def key(self):
+        """(block, id, namespace): how the amp's reports and AmpState.params name it."""
         return (self.block, self.id, self.namespace)
 
     def encode(self, value):

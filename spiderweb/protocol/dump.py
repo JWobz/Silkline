@@ -18,7 +18,30 @@ NAME_LENGTH_AT = 56  # in dump chunk 0: name length + 1
 NAME_START = 61  # in dump chunk 0: first character of the name
 PAYLOAD_START = 12  # 7-bit packing groups of 8 bytes start here
 
+# The blocks people pick a model for, by the name used for their on/off parameter
+# ("Stomp On"...). The panel (74:3) and 21:3 are left out. protocol.md section 8.
+STAGES = {
+    (0x2A, 0): "amp",
+    (0x22, 3): "cab",
+    (0x23, 3): "comp",
+    (0x25, 3): "eq",
+    (0x04, 3): "vol",
+    (0x5E, 2): "gate",
+    (0x0C, 3): "wah",
+    (0x19, 3): "stomp",
+    (0x1B, 3): "mod",
+    (0x1D, 3): "delay",
+    (0x1F, 3): "reverb"
+}
+
 class DumpCollector:
+    """Collects one preset dump's chunks (protocol.md section 3), as request() wants.
+
+    offer() each message; complete() is True once the last, short chunk is in.
+    Then name() is the preset's name, data() the whole dump and stream() the full
+    chunks only (records and read_values use it). chunks are the raw messages.
+    """
+
     def __init__(self):
         self.chunks = []
 
@@ -84,7 +107,14 @@ class DumpCollector:
     
 def read_values(dump):
     """The known parameters' values in a dump, as {wire key: value}."""
-    return {DUMP_RECORDS[key]: value for key, value in records(dump.stream()).items() if key in DUMP_RECORDS}
+    return {DUMP_RECORDS[key]: value for key, value in records(dump.data()).items() if key in DUMP_RECORDS}
+
+def stage_models(dump):
+    """Each stage's model number in a dump, as {stage: model}, e.g. {"amp": 0xDC, ...}.
+
+    Only the blocks in STAGES; an incomplete dump gives fewer, an empty one {}.
+    """
+    return {STAGES[key]: value for key, value in block_models(dump.data()).items() if key in STAGES}
 
 def records(stream):
     """Every parameter record, as {(block, sub, record_id): value}."""
@@ -109,6 +139,27 @@ def records(stream):
             value = struct.unpack("<f", raw)[0] if r[4] == 3 else int.from_bytes(raw, "little")
             out[(block, sub, r[0])] = value
             o += 10
+    return out
+
+def block_models(data):
+    """Each block's model number, as {(block, sub): model}.
+
+    The model is the value of the 05 info record at the block's start (protocol.md
+    section 3); the symbol table names it (symbols.py). Give it dump.data(), not
+    stream(): the last blocks can be in the short last chunk.
+    """
+    out, o = {}, 0
+    while o + 30 <= len(data):
+        a, b, c = data[o:o+10], data[o+10:o+20], data[o+20: o+30]    
+        is_block_start = (a[0] == 3 and a[3] == 0x80 and b[0] == 5 and b[3] == 0x80 and c[0] == 6 and c[3] == 0x80)
+        if not is_block_start:
+            o += 1
+            continue
+        block_word = int.from_bytes(a[6:10], "little")
+        block, sub = block_word & 0xFF, block_word >> 8
+        model = int.from_bytes(b[6:10], "little")
+        out[(block, sub)] = model
+        o += 30
     return out
 
 def is_first_dump_chunk(msg):
