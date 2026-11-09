@@ -1,4 +1,4 @@
-"""Tests for spiderweb/amp.py: amp operations on top of a real Connection.
+"""Tests for silkline/amp.py: amp operations on top of a real Connection.
 
 The amp itself is the FakeTransport from helpers.py, so these check that
 Amp sends the right messages and that its replies come back through the connection.
@@ -11,19 +11,20 @@ import time
 import unittest
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
-from spiderweb.protocol.messages import (
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.errors import AmpDisconnected, AmpError, AmpTimeout
+from silkline.protocol.messages import (
     DUMP_REQUEST,
     build_begin_message,
     build_set_message,
     select_message,
 )
-from spiderweb.protocol.parameters import BY_NAME
-from spiderweb.protocol.values import encode_set_value
-from spiderweb.amp import UPLOAD_TIMEOUT
-from spiderweb.protocol.upload import build_upload
+from silkline.protocol.parameters import BY_NAME
+from silkline.protocol.messages import FLOAT_VALUE, SWITCH_VALUE
+from silkline.protocol.values import encode_set_value
+from silkline.amp import UPLOAD_TIMEOUT
+from silkline.protocol.upload import build_upload
 from tests.helpers import (
     SET_ANSWER,
     UPLOAD_ANSWER,
@@ -34,6 +35,7 @@ from tests.helpers import (
     bass_dump,
     chime_dump,
     is_set,
+    set_fields,
     is_upload_header,
     replies_to,
 )
@@ -120,39 +122,30 @@ class TestConnect(AmpTest):
 class TestSet(AmpTest):
     def test_set_raw_sends_begin_then_set(self):
         amp, fake = self.make()
-        raw5 = bytes([1, 2, 3, 4, 5])
-        amp._set_raw(0x2A, 0, 0x25, raw5, 0)
+        value = bytes([1, 2, 3, 4])
+        amp._set_raw(0x2A, 0, 0x025, FLOAT_VALUE, value)
         self.assertEqual(fake.sent, [
             build_begin_message(FIRST_SEQ),
-            build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x25, raw5, 0, unknown=1),
+            build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x025, FLOAT_VALUE, value),
         ])
-
-    def test_set_raw_passes_unknown_through(self):
-        amp, fake = self.make()
-        raw5 = bytes(5)
-        amp._set_raw(0x2A, 0, 0x25, raw5, 0, unknown=3)
-        self.assertEqual(fake.sent[1], build_set_message(FIRST_SEQ + 1, 0x2A, 0, 0x25, raw5, 0, unknown=3))
 
     def test_set_parameter_sends_the_encoded_value(self):
         amp, fake = self.make()
         amp.set_parameter(DRIVE, 0.5)
         self.assertEqual(fake.sent[1], build_set_message(
-            FIRST_SEQ + 1, DRIVE.block, DRIVE.sub, DRIVE.id, encode_set_value(0.5), DRIVE.namespace))
+            FIRST_SEQ + 1, DRIVE.block, DRIVE.sub, DRIVE.symbol, FLOAT_VALUE, encode_set_value(0.5)))
 
     def test_set_parameter_sends_sub_and_namespace_separately(self):
         amp, fake = self.make()
         mix = BY_NAME["reverb mix"]
         amp.set_parameter(mix, 0.5)
-        self.assertEqual(fake.sent[1], build_set_message(
-            FIRST_SEQ + 1, 0x1F, 3, 0x7A, encode_set_value(0.5), 1))
+        self.assertEqual(set_fields(fake.sent[1]), (0x1F, 3, 0x17A, FLOAT_VALUE, 0.5))
 
     def test_a_switch_is_sent_like_the_app_does(self):
         amp, fake = self.make()
         amp.set_parameter(BY_NAME["stomp on"], 1)
         msg = fake.sent[1]
-        self.assertEqual((msg[13], msg[14], msg[17], msg[18]), (0x74, 3, 0x48, 3))
-        self.assertEqual(msg[22], 0x03)                      # 04 for floats
-        self.assertEqual(msg[26:31], bytes([1, 0, 0, 0, 0]))
+        self.assertEqual(set_fields(msg), (0x74, 3, 0x348, SWITCH_VALUE, 1))     # 4 for floats
 
     def test_a_bad_switch_value_sends_nothing(self):
         amp, fake = self.make()

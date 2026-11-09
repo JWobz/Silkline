@@ -1,6 +1,6 @@
 """Collects, for each preset you select on the amp, its full dump and which amp-block ids the Drive knob uses.
 
-Run from ~/SpiderWeb-Amp:   python3 -m tools.preset_survey
+Run from ~/silkline:   python3 -m tools.preset_survey
 Then, for each preset: turn the preset knob, wait for the name to appear, and when asked, turn the
 Drive knob back and forth for a few seconds. Ctrl-C to stop.
 """
@@ -9,8 +9,8 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from spiderweb.amp import Amp
-from spiderweb.protocol import MessageKind, classify
+from silkline.amp import Amp
+from silkline.protocol import MessageKind, classify
 
 DUMP_REQUEST = bytes.fromhex("f000010c22054d010200000b000b0000000400003c007f7f7f7f0000f7")
 OUT_DIR = Path("captures/presets")

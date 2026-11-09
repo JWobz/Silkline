@@ -1,8 +1,8 @@
-# SpiderWeb-Amp API
+# Silkline API
 
-`AmpService` (`spiderweb/service.py`) is the one owner of the amp. The server (phase 8)
+`AmpService` (`silkline/service.py`) is the one owner of the amp. The server (phase 8)
 and the tools talk to it only. Everything below `AmpService` (`Amp`, `Connection`,
-`AmpTransport`, `spiderweb/protocol/`) is internal. The wire format is in
+`AmpTransport`, `silkline/protocol/`) is internal. The wire format is in
 `docs/protocol.md`.
 
 Updated 2026-11-08: real parameter names, on/off switches, `save()` and each stage's model.
@@ -33,11 +33,11 @@ runs on the reader thread).
 | `state()` | `AmpState` | A copy of everything below. |
 | `on_change(callback)` | – | `callback(event)` for every `Event`. Keep it quick. |
 
-Errors (`spiderweb/errors.py`): `AmpError` is the base; `AmpDisconnected` (a command while
+Errors (`silkline/errors.py`): `AmpError` is the base; `AmpDisconnected` (a command while
 not connected), `AmpTimeout` (no answer), `AmpNotFound` (no amp on USB). `ValueError` for
 an unknown or unsettable parameter, or a value out of range.
 
-## State (`spiderweb/state.py`)
+## State (`silkline/state.py`)
 
 `AmpState`, `None` meaning "not known yet":
 
@@ -76,7 +76,7 @@ A reconnect looks like: `DISCONNECTED` (with `"error"`), `CONNECTING`, then `CON
 - **Supervisor** (`amp-supervisor`, while `keep_connected()` runs): connects and reconnects.
 - **Commands** run on the caller's thread and wait for the reader.
 
-## Parameters (`spiderweb/protocol/parameters.py`)
+## Parameters (`silkline/protocol/parameters.py`)
 
 Names are any case. Floats are 0 to 1 unless a range is given.
 
@@ -105,7 +105,7 @@ Boost"; a cab's name leaves out its mic).
 To get names, install the free Spider V Remote app and copy its `res` folder to
 `app_data/` in the project:
 ```
-scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" pi@raspberrypi:~/SpiderWeb-Amp/app_data
+scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" pi@raspberrypi:~/silkline/app_data
 ```
 Without the folder the service still works: a warning is logged and `"id"` and `"name"`
 are `None`. Stages people can't pick (the panel, 74:3, and 21:3) are left out.
@@ -127,5 +127,11 @@ treat both as the same control. Before any dump, the one asked for is sent.
 
 ## Not done yet
 
-- Checking reconnects on the real amp (pull the USB, power-cycle) with `keep_connected()`.
+Checked on the real amp (2026-11-09, `tools/finish_check.py`): connecting, slider bursts, and
+`keep_connected()` reconnecting by itself after a USB replug (18 s) and a power-cycle (25 s),
+with sets working again afterwards. The first real `save()` (User 1) kept its change after a
+reload.
+
+- Changing a stage's model, moving stages, save-as, the chain order, tone export / import
+  (v1.1, protocol.md section 8).
 - The server and the phone page (phase 8).

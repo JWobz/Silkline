@@ -1,4 +1,4 @@
-"""Reading the Line 6 app's symbol table (spiderweb/protocol/symbols.py, protocol.md section 10).
+"""Reading the Line 6 app's symbol table (silkline/protocol/symbols.py, protocol.md section 10).
 
 Two kinds of test:
 - Made-up tables, built here, so the reader's rules are checked on any machine.
@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from spiderweb.protocol.symbols import load_symbols
+from silkline.protocol.symbols import load_symbols
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_DATA = ROOT / "app_data"      # the Line 6 app's res folder, copied here (never in git)

@@ -10,8 +10,8 @@ model ID like "DoubleVerb"; these files turn the ID into "1965 Double Verb".
 import json
 from pathlib import Path
 
-from spiderweb.protocol.dump import stage_models
-from spiderweb.protocol.symbols import load_symbols
+from silkline.protocol.dump import stage_models
+from silkline.protocol.symbols import load_symbols
 
 _CAB_MICS = ("57OnAxis", "57OffAxis", "421", "U67")      # a cab's model ID ends with its mic
 

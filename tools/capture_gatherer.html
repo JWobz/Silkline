@@ -54,7 +54,7 @@
   </div>
 
   <h1>Recording what the API still needs</h1>
-  <p class="muted">For SpiderWeb-Amp (docs/protocol.md). One Wireshark recording for the whole session;
+  <p class="muted">For Silkline (docs/protocol.md). One Wireshark recording for the whole session;
     this page notes the time of every step so the two can be lined up afterwards. Your notes are kept in
     this browser if you reload, but download the log at the end.</p>
 
@@ -77,7 +77,7 @@
   <div class="card">
     <ol>
       <li>Stop the Wireshark recording and <strong>File &gt; Save As</strong>
-        <code>captures\windows\session.pcapng</code> (in the SpiderWeb-Amp folder).</li>
+        <code>captures\windows\session.pcapng</code> (in the silkline folder).</li>
       <li>Press <strong>Download log</strong> (top right) and move the file into the same folder.</li>
       <li>Unplug the amp from the PC and plug it back into the Pi.</li>
     </ol>
@@ -115,7 +115,7 @@ const STEPS = [
     what: "Select Chime 1: Class-A again. If the app can restore factory presets, use it for Chime 1 (it was saved over last time); otherwise just turn its Volume to where you like it and save. Write what you did." },
 ];
 
-const STORE = "spiderweb-capture-gatherer-v1";
+const STORE = "silkline-capture-gatherer-v1";
 let state = { started: null, log: [], notes: {}, done: {} };
 try { const saved = JSON.parse(localStorage.getItem(STORE) || "null"); if (saved) state = saved; } catch (e) {}
 
@@ -164,7 +164,7 @@ function stepCard(step) {
 }
 
 function text() {
-  const lines = ["# SpiderWeb-Amp capture gatherer log", "# clock (PC local time)  epoch  event  | note", ""];
+  const lines = ["# Silkline capture gatherer log", "# clock (PC local time)  epoch  event  | note", ""];
   if (state.started) lines.push(`${state.started.time}  ${state.started.epoch.toFixed(3)}  recording started`);
   for (const e of state.log) lines.push(`${e.time}  ${e.epoch.toFixed(3)}  ${e.event}${e.note ? "  | " + e.note.replace(/\n/g, " / ") : ""}`);
   lines.push("", "# notes per step");

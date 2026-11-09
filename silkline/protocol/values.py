@@ -10,23 +10,17 @@ import struct
 
 
 def encode_set_value(value):
-    """Turn a float into the five bytes the amp expects in a set message.
+    """A float as the 4 value bytes of a set message (little-endian; packed later).
 
-    Only the float's top 16 bits are sent. Values above 1 are fine (the gate threshold
-    is sent as 14 to 77); negative values are refused, because the sign bit would
-    land in the top byte, above 0x7F.
+    The whole float is sent, and any value works: build_set_message packs the top
+    bits, the sign bit included.
     """
-    if value < 0:
-        raise ValueError(f"Value must not be negative, got {value}")
-    float_bytes = struct.pack("<f", value)
-    third, top = float_bytes[2], float_bytes[3]
-    flag = 0x40 if (third & 0x80) else 0x00
-    return bytes([0x00, 0x00, flag, third & 0x7F, top])
+    return struct.pack("<f", value)
 
 
 def encode_switch(on):
-    """The five value bytes of an on/off set: 01 for on, 00 for off, then zeros."""
-    return bytes([1 if on else 0, 0, 0, 0, 0])
+    """The 4 value bytes of an on/off set: the number 1 for on, 0 for off."""
+    return struct.pack("<I", 1 if on else 0)
 
 
 def decode_value(value):

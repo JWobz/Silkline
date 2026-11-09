@@ -1,6 +1,6 @@
 import unittest
 
-from spiderweb.protocol.dump import DumpCollector
+from silkline.protocol.dump import DumpCollector
 from tests.helpers import GAIN_REPORT as PARAM, TAP, capture_messages, preset_select_section
 
 

@@ -5,7 +5,7 @@ Uploads: sending data to the amp (a save, or a type change in v1.1).
 protocol.md section 8, "Uploads".
 """
 
-from spiderweb.protocol.packing import pack
+from silkline.protocol.packing import pack
 
 HEADER = bytes.fromhex("f000010c22054d")
 EDIT_BUFFER = 0xFFFFFFFF  # "slot" for the live preset (type changes, v1.1)

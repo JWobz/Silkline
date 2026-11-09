@@ -13,9 +13,9 @@ import threading
 import time
 from dataclasses import dataclass
 
-from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
-from spiderweb.logger import Logger
-from spiderweb.transport import AmpTransport, find_device
+from silkline.errors import AmpDisconnected, AmpError, AmpTimeout
+from silkline.logger import Logger
+from silkline.transport import AmpTransport, find_device
 
 
 @dataclass

@@ -635,6 +635,67 @@ What this changes:
 - **The app paces sets like the Pi:** begin and set, then it waits for the 29-byte answer
   before the next (10 to 20 ms apart).
 
+### The set message is four packed numbers (confirmed 2026-11-09, on the amp)
+
+**A set's `msg[12:-1]` is 7-bit packed like a dump** (section 3: groups of 8 from
+`msg[12]`, a byte of top bits first, MSB-first). Unpacked it is 21 bytes, four
+little-endian 32-bit numbers and 5 zeros:
+
+| Bytes | Number | Example (panel Volume) |
+|---|---|---|
+| 0-3 | block word: block, sub | `74 03 00 00` = 74:3 |
+| 4-7 | **the parameter's symbol** (namespace << 8, id) | `24 03 00 00` = 0x324 |
+| 8-11 | value type: 4 float, 3 on/off | `04 00 00 00` |
+| 12-15 | the value: a float, or 1 / 0 | `5e 2f 17 3f` = 0.5906 |
+
+All 3054 sets in the Windows captures repack byte for byte from this. What it explains:
+- **"id" and "namespace" are one number, the symbol** (section 10's symbol table). The
+  "namespace" is just its high byte: Volume 0x324 = id 24, namespace 3.
+- **`msg[20]` ("unknown") is the top bits of the float's two low bytes.** The app sends
+  the whole float, so it changes with the value; the Pi sends only the top 16 bits (the
+  low two bytes 0, the `00 00 40` / `00 00 00` start of `encode_set_value`'s bytes is the
+  same packing done by hand), which works. The Pi's `01` in `msg[20]` sets the top bit
+  of the float's second-lowest byte, a change of about 1 part in 100,000: harmless, but
+  it should be 0.
+- **An id of 0x80 or more needs its top bit in `msg[12]`** (0x04: `msg[17]` is the 5th
+  byte of that group). EQ Hi Shelf Gain is symbol **0x282**: the app sends `02 02` with
+  `msg[12]` = 04 (names.txt), and the amp sets it. parameters.py had id 0x02, so the Pi
+  sent symbol 0x202 and nothing moved; with 0x282 record 25:3/70 followed 0.1 and 0.9
+  (2026-11-09). (An earlier note here said the app's set was broken: it isn't; that
+  survey looked only from `msg[13]` on.)
+
+**Dump records are the "...State" symbol** of the same name, low byte only: Lo Shelf Gain
+is symbol 0x273, its state 0x26B, stored as record 6B in 25:3. With the `.models` files
+(section 10: each model's params by `symbolicID`), every parameter's set symbol and dump
+record can be found without a capture: symbol(name) and symbol(name + "State").
+
+**Records the amp run found (2026-11-09, `captures/dump_params_2.txt`, `_3.txt`; same on
+presets 4, 8, 0 and 14):**
+
+| Parameter | Set symbol | Dump record |
+|---|---|---|
+| Gate Threshold / Decay | 5E:2 0x260 / 0x00A | 5F / 21 |
+| Vol Min / Max | 04:3 0x309 / 0x30A | 06 / 07 |
+| Comp Threshold / Gain | 23:3 0x263 / 0x025 | 62 / 1F |
+| EQ Lo / LMid / HMid / Hi Freq | 25:3 0x007 / 0x276 / 0x27B / 0x27F | 6A / 6C / 6E / 6F |
+| EQ Lo / LMid / HMid / Hi Gain | 25:3 0x273 / 0x279 / 0x025 / **0x282** | 6B / 6D / 1F / 70 |
+| Reverb Time / Tone / Mix (spring) | 1F:3 0x00A / 0x246 / 0x17A | 21 / 45 / 75 |
+| Gate / Wah / Comp / EQ / Vol / Reverb On | 74:3 | 38 / 3B / 3D / 3E / 3A / 34 |
+
+**The "0x8000 flag" on switch records was ours, not the amp's** (found 2026-11-09): after
+a set from the Pi a switch record read 0x8000 / 0x8001, because the Pi's `01` in
+`msg[20]` is the top bit of the value's second byte, so "1" was sent as 0x8001. The same
+set as four packed numbers stores a plain 1 (Reverb On: 32769 the old way, 1 packed). A
+save made from such a dump stored the 0x8001 (User 1, 2026-11-09); the app's saves never
+contain it.
+
+**Packed sets checked on every parameter (2026-11-09, Chime 1):** all 37 settable
+parameters, each set to two values, landed in the record in the table above, floats to
+the last bit (0.2345 stored as 0.2345, where the old top-16-bits encoding gave 0.2344),
+switches as plain 0 / 1, the gate threshold at 28.77 and 69.22, and EQ Hi Shelf Gain
+(symbol 0x282, record 70). (Gain had no record because Chime 1 now has a Drive model.) A
+save of a dump with no 0x8000s reloaded with none.
+
 ### Stages: on/off, types, order (2026-11-07, `captures/windows/session.txt`)
 
 From a guided session (`tools/capture_gatherer.html`, log in `captures/windows/session_log.txt`).

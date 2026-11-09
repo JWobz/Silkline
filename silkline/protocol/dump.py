@@ -11,8 +11,8 @@ each stage's model, and preset_data() the preset as save() uploads it.
 
 import struct
 
-from spiderweb.protocol.packing import unpack_data
-from spiderweb.protocol.parameters import DUMP_RECORDS
+from silkline.protocol.packing import unpack_data
+from silkline.protocol.parameters import DUMP_RECORDS
 
 from .messages import HEADER
 

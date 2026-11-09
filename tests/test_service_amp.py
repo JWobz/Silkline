@@ -10,10 +10,10 @@ import time
 import unittest
 from pathlib import Path
 
-from spiderweb.amp import Amp
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpDisconnected, AmpTimeout
-from spiderweb.protocol.messages import (
+from silkline.amp import Amp
+from silkline.connection import Connection
+from silkline.errors import AmpDisconnected, AmpTimeout
+from silkline.protocol.messages import (
     DUMP_REQUEST,
     MessageKind,
     build_begin_message,
@@ -21,10 +21,11 @@ from spiderweb.protocol.messages import (
     classify,
     select_message,
 )
-from spiderweb.protocol.parameters import BY_NAME
-from spiderweb.protocol.values import decode_set_value, encode_set_value
-from spiderweb.protocol.dump import DumpCollector, preset_data
-from spiderweb.service import AmpService, ConnectionState, EventType
+from silkline.protocol.parameters import BY_NAME
+from silkline.protocol.messages import FLOAT_VALUE
+from silkline.protocol.values import encode_set_value
+from silkline.protocol.dump import DumpCollector, preset_data
+from silkline.service import AmpService, ConnectionState, EventType
 from tests.test_symbols import make_table
 from tests.helpers import (
     ACOUSTIC,
@@ -43,6 +44,7 @@ from tests.helpers import (
     chime_dump,
     first_click,
     is_set,
+    set_fields,
     is_upload_header,
 )
 
@@ -249,7 +251,7 @@ class TestSetGet(ServiceTest):
         service.set("drive", 0.5)
         self.assertEqual(fake.sent, [
             build_begin_message(0x0C),
-            build_set_message(0x0D, DRIVE.block, DRIVE.sub, DRIVE.id, encode_set_value(0.5), DRIVE.namespace),
+            build_set_message(0x0D, DRIVE.block, DRIVE.sub, DRIVE.symbol, FLOAT_VALUE, encode_set_value(0.5)),
         ])
 
     def test_names_are_not_case_sensitive(self):
@@ -462,7 +464,7 @@ class TestValuesFromDumps(ServiceTest):
 
 
 def sent_param_id(fake):
-    """ The parameter id of the last set the fake was sent (msg[17], protocol.md section 8). """
+    """ The parameter id (its symbol's low byte) of the last set the fake was sent (protocol.md section 8). """
     return [msg for msg in fake.sent if is_set(msg)][-1][17]
 
 
@@ -553,8 +555,8 @@ class TestDrivePick(ServiceTest):
 
 
 def sets_sent(fake):
-    """ (param id, value) of every set the fake was sent, in order (msg[17] and msg[26:31]). """
-    return [(msg[17], round(decode_set_value(msg[26:31]), 2)) for msg in fake.sent if is_set(msg)]
+    """ (param id, value) of every set the fake was sent, in order (protocol.md section 8). """
+    return [(set_fields(msg)[2] & 0xFF, round(set_fields(msg)[4], 2)) for msg in fake.sent if is_set(msg)]
 
 
 class TestSetLatest(ServiceTest):

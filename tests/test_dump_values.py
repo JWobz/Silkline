@@ -1,6 +1,6 @@
 """Reading parameter values from a preset dump (protocol.md section 3, "The dump's layout").
 
-The API these expect (spiderweb/protocol/dump.py):
+The API these expect (silkline/protocol/dump.py):
   DumpCollector.data() -> bytes     each chunk unpacked and cut to its length, joined
   records(data) -> {(block, sub, record_id): value}     float for type 03, int otherwise
   read_values(dump) -> {(block, id, sub): value}         wire keys, as in parameters.py
@@ -11,8 +11,8 @@ read with the reference parser in tools/dump_params.py.
 """
 import unittest
 
-from spiderweb.protocol.dump import DumpCollector, block_models, _find_blocks, read_values, records, stage_models
-from spiderweb.protocol.parameters import BY_NAME
+from silkline.protocol.dump import DumpCollector, block_models, _find_blocks, read_values, records, stage_models
+from silkline.protocol.parameters import BY_NAME, PARAMETERS
 from tests.helpers import chime_dump, preset_select_section
 
 GAIN = (0x2A, 0x25, 0)
@@ -148,9 +148,32 @@ class TestReadValues(unittest.TestCase):
         self.assertEqual(read_values(chime())[COMP_ON], 1)
 
     def test_only_known_parameters(self):
-        # Records not matched to a wire id (most of the other blocks, so far) are left out.
+        # Records that aren't a parameter's (most of each effect's own knobs) are left out.
+        known = {p.key for p in PARAMETERS if p.record is not None}
         for dump in (chime(), selected(0), selected(8), selected(12)):
-            self.assertLessEqual(set(read_values(dump)), KNOWN)
+            self.assertLessEqual(set(read_values(dump)), known)
+
+    def test_every_parameter_is_read_from_a_dump(self):
+        # All 37 with a record, on Chime (a Gain model) and Bass (a Drive model): each
+        # preset has one of Gain and Drive, so between them every parameter shows up.
+        found = set(read_values(chime())) | set(read_values(selected(0)))
+        missing = [p.name for p in PARAMETERS if p.record is not None and p.key not in found]
+        self.assertEqual(missing, [])
+
+    def test_the_new_records_on_chime(self):
+        # Values in the Chime capture, read with records() (protocol.md section 8 table).
+        v = read_values(chime())
+        for name, record in (("Gate Threshold", 0x5F), ("Vol Min", 0x06), ("Comp Threshold", 0x62),
+                             ("EQ Low Freq", 0x6A), ("EQ High Gain", 0x70), ("Reverb Mix", 0x75)):
+            with self.subTest(name):
+                p = BY_NAME[name.lower()]
+                self.assertEqual(v[p.key], records(chime().data())[(p.block, p.sub, record)])
+
+    def test_switches_are_plain_0_or_1(self):
+        switches = [p.key for p in PARAMETERS if p.kind == "switch"]
+        for dump in (chime(), selected(0), selected(8), selected(12)):
+            v = read_values(dump)
+            self.assertTrue(all(v[k] in (0, 1) for k in switches if k in v))
 
     def test_an_empty_collector_gives_nothing(self):
         self.assertEqual(read_values(DumpCollector()), {})

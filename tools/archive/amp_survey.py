@@ -26,12 +26,12 @@ import threading
 import time
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpError
-from spiderweb.protocol.parameters import BY_NAME
-from spiderweb.service import AmpService, ConnectionState, EventType
-from spiderweb.transport import find_device
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.errors import AmpError
+from silkline.protocol.parameters import BY_NAME
+from silkline.service import AmpService, ConnectionState, EventType
+from silkline.transport import find_device
 from tools.dump_params import dump_data
 
 DRIVES = (BY_NAME["drive"], BY_NAME["drive (alt)"])

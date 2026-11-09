@@ -5,8 +5,10 @@ Handles the messages that are sent and received between the amp and the machine
 """
 
 from enum import Enum
+import struct
 
-from spiderweb.protocol.presets import entry_name
+from silkline.protocol.packing import pack
+from silkline.protocol.presets import entry_name
 
 from .knob import POSITIONS
 from .values import decode_value
@@ -147,52 +149,26 @@ def build_begin_message(sequence):
     return message
 
 
-def build_set_message(sequence, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1):
-    """Build a SysEx message that sets a parameter to a raw five-byte value.
+def build_set_message(sequence, block, sub, symbol, value_type, value):
+    """Build the SysEx message that sets a parameter (protocol.md section 8).
 
-    block and sub go in msg[13] and msg[14], param_id and namespace in msg[17]
-    and msg[18]. The namespace is often the same as sub but not always (Reverb
-    mix is block 1F sub 3, id 7A in namespace 1). unknown goes in msg[20]; the
-    app cycles it 0 to 3 and the amp accepts 1 (protocol.md section 8).
+    Its data is four little-endian numbers, packed like a dump: the block word
+    (block | sub << 8), the parameter's symbol (Parameter.symbol, e.g. 0x324 for
+    Volume), value_type (FLOAT_VALUE or SWITCH_VALUE) and value, its 4 bytes
+    (values.encode_set_value or encode_switch), then 5 zeros. Packing carries every
+    top bit, so symbols of 0x80 and more (EQ Hi Shelf Gain, 0x282) and whole floats
+    go across. Raises ValueError for a sequence outside 0 to 127 or a value that
+    isn't 4 bytes.
     """
     if not 0 <= sequence < 0x80:
         raise ValueError(f"Sequence must be between 0 and 127, got {sequence}")
-    if len(raw5) != 5:
-        raise ValueError(f"raw5 must contain exactly 5 bytes, got {len(raw5)}")
+    if len(value) != 4:
+        raise ValueError(f"Incorrect value length, got {len(value)}")
 
-    message = (
-        BYTE_HEADER
-        + bytes(
-            [
-                sequence,  # msg[8] sequence number
-                0x00,
-                0x00,  # msg[9], msg[10]
-                0x0F,  # msg[11] message type: set
-                0x00,  # msg[12]
-                block,  # msg[13] block
-                sub,  # msg[14] sub
-                0x00,
-                0x00,  # msg[15], msg[16]
-                param_id,  # msg[17] id
-                namespace,  # msg[18] namespace
-                0x00,  # msg[19]
-                unknown,  # msg[20] unknown
-                0x00,  # msg[21]
-                value_type,  # msg[22]
-                0x00,
-                0x00,
-                0x00,  # msg[23] to msg[25]
-            ]
-        )
-        + raw5
-        + bytes(5)
-        + bytes([0xF7])
-    )
-
+    data = struct.pack("<III", block | sub << 8, symbol, value_type) + value + bytes(5)
+    message = BYTE_HEADER + bytes([sequence, 0x00, 0x00, 0x0f]) + pack(data) + b"\xf7"
     if len(message) != SET_VALUE_LENGTH:
-        raise ValueError(
-            f"SET_VALUE_LENGTH mismatch: {len(message)} != {SET_VALUE_LENGTH}"
-        )
+        raise ValueError(f"SET_VALUE_LENGTH mismatch: {len(message)} != {SET_VALUE_LENGTH}")
     return message
 
 

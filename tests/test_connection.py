@@ -2,10 +2,10 @@ import threading
 import time
 import unittest
 
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
-from spiderweb.protocol.dump import DumpCollector
-from spiderweb.protocol.messages import DUMP_REQUEST
+from silkline.connection import Connection
+from silkline.errors import AmpDisconnected, AmpError, AmpTimeout
+from silkline.protocol.dump import DumpCollector
+from silkline.protocol.messages import DUMP_REQUEST
 from tests.helpers import FakeTransport, Recorder, capture_messages, replies_to
 
 

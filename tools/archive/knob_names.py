@@ -13,9 +13,9 @@ Results are printed and saved to captures/knob_names.txt (a new file each run).
 import time
 from pathlib import Path
 
-import spiderweb.protocol as protocol
-from spiderweb.amp import Amp
-from spiderweb.protocol import DUMP_REQUEST, settle_position
+import silkline.protocol as protocol
+from silkline.amp import Amp
+from silkline.protocol import DUMP_REQUEST, settle_position
 from tools.preset_select import read_dump
 
 

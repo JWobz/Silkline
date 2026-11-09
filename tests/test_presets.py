@@ -2,16 +2,16 @@
 
 The format is in protocol.md section 4, "Preset list". The entries below are
 real replies from captures/handshake_replies.txt; the requests are real lines
-from spiderweb/handshake.txt.
+from silkline/handshake.txt.
 """
 import struct
 import unittest
 
-from spiderweb.amp import load_handshake
-from spiderweb.protocol.dump import DUMP_CHUNK_LENGTH, DumpCollector
-from spiderweb.protocol.messages import DUMP_REQUEST
-from spiderweb.protocol.packing import unpack
-from spiderweb.protocol.presets import entry_name, preset_list_request, preset_names
+from silkline.amp import load_handshake
+from silkline.protocol.dump import DUMP_CHUNK_LENGTH, DumpCollector
+from silkline.protocol.messages import DUMP_REQUEST
+from silkline.protocol.packing import unpack
+from silkline.protocol.presets import entry_name, preset_list_request, preset_names
 from tests.helpers import (
     ACOUSTIC,
     BASS_LONG,

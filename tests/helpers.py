@@ -4,12 +4,13 @@ Everything here is used by more than one test file. A helper only one file needs
 stays in that file.
 """
 import queue
+import struct
 import threading
 from pathlib import Path
 
-from spiderweb.protocol.messages import MessageKind, classify
-from spiderweb.protocol.packing import unpack
-from spiderweb.service import EventType
+from silkline.protocol.messages import MessageKind, classify
+from silkline.protocol.packing import unpack
+from silkline.service import EventType
 
 CAPTURES = Path(__file__).resolve().parent.parent / "captures"
 
@@ -32,7 +33,7 @@ USER_1 = bytes.fromhex(                       # short layout
 BASS_LONG = bytes.fromhex(                    # long layout
     "f000010c22054d012f00020400010000001d00000100000000000938002500000000007d18375c4f6204000000050000004261730073000000000000f7")
 
-# Preset-list requests from spiderweb/handshake.txt (lines 17, 21 and 61).
+# Preset-list requests from silkline/handshake.txt (lines 17, 21 and 61).
 SHORT_0 = bytes.fromhex("f000010c22054d010300000b00060000000400000000000000000000f7")
 SHORT_5 = bytes.fromhex("f000010c22054d010700000b00060000000400000000050000000000f7")
 LONG_0 = bytes.fromhex("f000010c22054d012f00000b000e0000000400000000000000000000f7")
@@ -43,6 +44,18 @@ def is_set(msg):
 
     An upload's header is also 37 bytes with 0F at msg[11], but on channel 1. """
     return len(msg) == 37 and msg[7] == 0 and msg[11] == 0x0F
+
+
+def set_fields(msg):
+    """ What a set message says, as (block, sub, symbol, value_type, value): its data is
+    four packed little-endian numbers (protocol.md section 8). The value is a float for
+    value type 4, a whole number otherwise. Written from the protocol, not with the
+    library, so tests of build_set_message check it independently. """
+    data = unpack(msg)
+    word, symbol, value_type = struct.unpack_from("<III", data, 0)
+    raw = data[12:16]
+    value = struct.unpack("<f", raw)[0] if value_type == 4 else int.from_bytes(raw, "little")
+    return word & 0xFF, word >> 8, symbol, value_type, value
 
 
 # --- captures ---------------------------------------------------------------------

@@ -6,10 +6,10 @@ Usage (from the project root):
 Messages from the amp are handled on the connection's reader thread and
 printed as they come; commands are read from the keyboard on the main thread.
 """
-from spiderweb import protocol
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.logger import Logger
+from silkline import protocol
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.logger import Logger
 
 CHANGE_THRESHOLD = 0.02
 

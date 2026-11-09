@@ -5,8 +5,8 @@ Usage (from the project root):
 """
 import time
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
 
 
 def show(m):

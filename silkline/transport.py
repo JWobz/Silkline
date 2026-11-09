@@ -9,8 +9,8 @@ import os
 import select
 import time
 
-from spiderweb.errors import AmpNotFound
-from spiderweb.logger import Logger
+from silkline.errors import AmpNotFound
+from silkline.logger import Logger
 
 _SPIDER_KEYWORD = "spider"
 

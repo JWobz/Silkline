@@ -1,5 +1,8 @@
+import struct
 import unittest
-from spiderweb.protocol import (
+
+from silkline.protocol import (
+    FLOAT_VALUE,
     MessageKind,
     BEGIN_LENGTH,
     BYTE_HEADER,
@@ -10,6 +13,8 @@ from spiderweb.protocol import (
     decode_set_value,
     decode_value,
     encode_set_value,
+    encode_switch,
+    unpack,
 )
 
 class TestProtocol(unittest.TestCase):
@@ -21,14 +26,11 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(message[-1], 0xF7)
 
     def test_build_set_message(self):
-        raw5 = encode_set_value(0.5)
-        message = build_set_message(0x0D, 0x74, 3, 0x24, raw5, 3, unknown=0)
+        message = build_set_message(0x0D, 0x74, 3, 0x324, FLOAT_VALUE, encode_set_value(0.5))
         self.assertEqual(len(message), SET_VALUE_LENGTH)
         self.assertEqual(message[:8], BYTE_HEADER)
-        self.assertEqual(message[8], 0x0D)
-        self.assertEqual(message[11:19], bytes([0x0F, 0, 0x74, 3, 0, 0, 0x24, 3]))
-        self.assertEqual(message[20], 0)
-        self.assertEqual(message[26:31], raw5)
+        self.assertEqual(message[8:12], bytes([0x0D, 0, 0, 0x0F]))
+        self.assertEqual(unpack(message)[:16], bytes.fromhex("74030000" "24030000" "04000000" "0000003f"))
         self.assertEqual(message[-1], 0xF7)
 
     def test_known_values(self):
@@ -150,7 +152,8 @@ class TestProtocol(unittest.TestCase):
     # --- set values (what we send to the amp) ---
 
     def test_decode_set_value_known_app_vectors(self):
-        # (raw five bytes from the PC app's set messages, expected value)
+        # (msg[26:31] of the PC app's set messages, expected value): the float's top
+        # 16 bits, with msg[28]'s packing bit for msg[29] (protocol.md section 8).
         vectors = [
             ("5022405d3e", 0.4316),
             ("6033400c3e", 0.2734),
@@ -161,47 +164,20 @@ class TestProtocol(unittest.TestCase):
                 value = decode_set_value(bytes.fromhex(raw_hex))
                 self.assertAlmostEqual(value, expected, places=3)
 
-    def test_set_value_endpoints(self):
-        self.assertEqual(decode_set_value(encode_set_value(0.0)), 0.0)
-        self.assertEqual(decode_set_value(encode_set_value(1.0)), 1.0)
-
-    def test_set_value_round_trip(self):
-        for x in (0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0):
+    def test_encode_set_value_is_the_plain_float(self):
+        # 4 little-endian bytes; build_set_message packs them.
+        for x in (0.0, 0.2345, 0.5, 1.0, 77.0):
             with self.subTest(x=x):
-                result = decode_set_value(encode_set_value(x))
-                # the encoder drops the low 16 bits of the float
-                self.assertAlmostEqual(result, x, delta=1 / 128)
+                self.assertEqual(encode_set_value(x), struct.pack("<f", x))
 
-    def test_encode_set_value_length_is_five(self):
-        for x in (0.0, 0.5, 1.0):
-            self.assertEqual(len(encode_set_value(x)), 5)
+    def test_encode_set_value_takes_negatives(self):
+        # The models file gives the gate threshold -96 to 0; packing carries the sign bit.
+        self.assertEqual(encode_set_value(-96.0), struct.pack("<f", -96.0))
 
-    def test_encode_set_value_bytes_are_valid_sysex_data(self):
-        # SysEx data bytes must be below 0x80
-        for i in range(101):
-            x = i / 100
-            with self.subTest(x=x):
-                for byte in encode_set_value(x):
-                    self.assertLess(byte, 0x80)
-
-    def test_encode_set_value_flag_is_in_third_byte_only(self):
-        raw = encode_set_value(1.0)
-        self.assertEqual(raw[0], 0)
-        self.assertEqual(raw[1], 0)
-        self.assertEqual(raw[2], 0x40)
-
-    def test_encode_set_value_refuses_negatives(self):
-        # A negative float's sign bit would land in the top byte, above 0x7F.
-        for bad in (-0.1, -96.0):
-            with self.subTest(value=bad):
-                with self.assertRaises(ValueError):
-                    encode_set_value(bad)
-
-    def test_encode_set_value_takes_values_above_one(self):
-        # The gate threshold is sent as 14 to 77 (protocol.md section 8).
-        raw5 = encode_set_value(77.0)
-        self.assertTrue(all(b < 0x80 for b in raw5))
-        self.assertEqual(decode_set_value(raw5), 77.0)
+    def test_encode_switch(self):
+        self.assertEqual(encode_switch(True), bytes([1, 0, 0, 0]))
+        self.assertEqual(encode_switch(False), bytes(4))
+        self.assertEqual(encode_switch(1), encode_switch(True))
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,10 +6,10 @@ Usage (from the project root):
 import sys
 import time
 
-import spiderweb.protocol as protocol
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.logger import Logger
+import silkline.protocol as protocol
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.logger import Logger
 
 LISTEN = 1.0          # seconds to show replies after the set
 

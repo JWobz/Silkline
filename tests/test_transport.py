@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from spiderweb.transport import AmpTransport
+from silkline.transport import AmpTransport
 
 
 class TestTransportRead(unittest.TestCase):
@@ -41,7 +41,7 @@ class TestTransportRead(unittest.TestCase):
     def test_a_spurious_wakeup_is_not_an_error(self):
         # select says "ready" but the read finds nothing: that's not an unplug.
         self.amp_sends("f0")
-        with mock.patch("spiderweb.transport.os.read", side_effect=BlockingIOError):
+        with mock.patch("silkline.transport.os.read", side_effect=BlockingIOError):
             self.assertEqual(self.transport.read(0.1), [])
 
     def test_close_twice_is_harmless(self):

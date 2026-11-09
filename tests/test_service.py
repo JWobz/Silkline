@@ -1,8 +1,8 @@
 import unittest
 from dataclasses import FrozenInstanceError
 
-from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
-from spiderweb.service import (
+from silkline.errors import AmpDisconnected, AmpError, AmpTimeout
+from silkline.service import (
     AmpState,
     ConnectionState,
     Event,

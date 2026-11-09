@@ -26,10 +26,10 @@ import threading
 import time
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.protocol.parameters import BY_NAME
-from spiderweb.protocol.messages import _is_set_answer
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.protocol.parameters import BY_NAME
+from silkline.protocol.messages import _is_set_answer
 from tools.dump_params import dump_data
 
 DRIVE, DRIVE_ALT = BY_NAME["drive"], BY_NAME["drive (alt)"]

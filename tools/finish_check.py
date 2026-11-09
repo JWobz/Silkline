@@ -1,22 +1,18 @@
-"""The last real-amp checks before calling the API finished (2026-11-07).
+"""The last real-amp checks before calling the API finished (2026-11-07; step 3 dropped 2026-11-09).
 
 Usage (from the project root, on the Pi, amp on, nothing else using the amp; no
 guitar needed, and nothing is judged by ear: every check reads the amp's dump):
     python3 -m tools.finish_check
 
-Press Enter to start each step, or type s and Enter to skip it. About 10 minutes.
+Press Enter to start each step, or type s and Enter to skip it. About 5 minutes.
 
   1. connect    AmpService.keep_connected(): connects, with values from the dump
   2. sliders    set_latest() in a burst on Chime and on Jungle $lash: the newest value
                 reaches the amp (read back from the dump), and "drive" picks the
                 preset's Drive id
-  3. names      each amp knob id set to 0, then 1: which dump record moves? (Treble
-                2A:24, Presence 2A:27, and the guesses Bass 2A:22, Mid 2A:23; protocol.md
-                section 3, "Names for the records". The names themselves come from the
-                Windows app capture.)
-  4. replug     pull the USB cable, plug it back in: keep_connected() should reconnect
+  3. replug     pull the USB cable, plug it back in: keep_connected() should reconnect
                 by itself, with the preset names, and sets should work again
-  5. power      the same, switching the amp off and on (the preset list comes late)
+  4. power      the same, switching the amp off and on (the preset list comes late)
 
 Everything goes to captures/finish_check.txt (a new file each run), raw messages
 included. Only the edit buffer changes; nothing is saved on the amp. Turn the preset
@@ -26,16 +22,13 @@ import threading
 import time
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpError
-from spiderweb.protocol.parameters import Parameter
-from spiderweb.service import AmpService, ConnectionState, EventType
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.errors import AmpError
+from silkline.service import AmpService, ConnectionState, EventType
 from tools.dump_params import records
 
 CHIME, JUNGLE = 4, 8
-# Amp knob ids to name by ear: wire id -> the amp block record it should change.
-KNOBS = [(0x24, 0x1E, "Treble?"), (0x27, 0x20, "Presence?"), (0x22, 0x1C, "Bass?"), (0x23, 0x1D, "Mid?")]
 BURST = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 DRIVE_KEYS = {(0x2A, 0x25, 0), (0x2A, 0x26, 0)}    # Gain and Drive
 WAIT_CONNECTED = 90.0           # seconds for keep_connected() to come back (power-on can take a few tries)
@@ -153,11 +146,15 @@ class FinishCheck:
         return key
 
     def check_sliders(self):
-        if not self.go("2. sliders", "On Chime, then Jungle $lash: Drive swept 0.1 to 0.9 in a quick burst. "
-                       "Strum: it should end loud and dirty each time."):
+        if not self.go("2. sliders", "On Chime, then Jungle $lash: Drive swept 0.1 to 0.9 in a quick burst; "
+                       "the dump shows whether the last value reached the amp. No need to play."):
             return
-        for preset, expect in ((CHIME, 0x25), (JUNGLE, 0x26)):
+        for preset in (CHIME, JUNGLE):
             name = self.service.select_preset(preset)
+            # Which one the preset has: a model with Drive has DriveState (record 33) in the
+            # dump, a Gain model GainState (1f). Presets can change (Chime 1 was saved over).
+            has = records(self.service._amp.request_dump())
+            expect = 0x26 if "2A:0/33" in has else 0x25
             key = self.burst(f"{preset} {name}", "drive")
             if key:
                 self.result(f"drive pick {preset}", "PASS" if key[1] == expect else "FAIL",
@@ -168,28 +165,6 @@ class FinishCheck:
             arrived = any(abs(v - BURST[-1]) < 0.01 for v in stored.values())
             self.result(f"sliders {preset} in the amp", "PASS" if arrived else "FAIL",
                         f"the dump's Drive record: {stored} (expected {BURST[-1]})")
-
-    def check_names(self):
-        if not self.go("3. names", "On Chime, each amp knob id is set to 0, then 1, and the dump shows which "
-                       "record moved. No need to play. (The names themselves come from the Windows app capture.)"):
-            return
-        name = self.service.select_preset(CHIME)
-        amp = self.service._amp              # a tool: raw ids aren't service commands
-        for wire, record, guess in KNOBS:
-            param = Parameter(f"2A:{wire:02X}:0", 0x2A, 0, wire, settable=True)
-            try:
-                for value in (0.0, 1.0):
-                    amp.set_parameter(param, value)
-                    time.sleep(0.5)
-                found = records(amp.request_dump())
-            except AmpError as e:
-                self.result(f"name 2A:{wire:02X}", "FAIL", f"{type(e).__name__}: {e}")
-                continue
-            in_dump = [k for k, (typ, v) in found.items() if k.startswith("2A:0/") and typ == 3 and abs(v - 1.0) < 0.01]
-            expect = f"2A:0/{record:02x}"
-            self.result(f"name 2A:{wire:02X} ({guess})", "PASS" if in_dump == [expect] else "CHECK",
-                        f"records at 1.0 in the amp block: {in_dump} (expected {expect})")
-        self.service.select_preset(CHIME)    # put the knobs back to the preset's own values
 
     def check_loss(self, number, title, lose, restore):
         if not self.go(f"{number}. {title}", f"With keep_connected() running you {lose}, then {restore}. "
@@ -227,9 +202,8 @@ class FinishCheck:
             self.write("connecting (about 15 s)...")
             if self.check_connect():
                 self.check_sliders()
-                self.check_names()
-            self.check_loss(4, "replug", "pull the amp's USB cable out", "plug it back in")
-            self.check_loss(5, "power", "switch the amp off (leave the USB in)", "switch it back on")
+            self.check_loss(3, "replug", "pull the amp's USB cable out", "plug it back in")
+            self.check_loss(4, "power", "switch the amp off (leave the USB in)", "switch it back on")
         except KeyboardInterrupt:
             self.write("stopped with Ctrl-C")
         except Exception as e:

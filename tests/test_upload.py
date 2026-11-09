@@ -7,9 +7,9 @@ and captures/windows/session.txt (14 type changes and a save-as).
 import unittest
 from pathlib import Path
 
-from spiderweb.protocol.dump import DumpCollector, preset_data
-from spiderweb.protocol.packing import pack, unpack, unpack_data
-from spiderweb.protocol.upload import EDIT_BUFFER, build_upload, _upload_message
+from silkline.protocol.dump import DumpCollector, preset_data
+from silkline.protocol.packing import pack, unpack, unpack_data
+from silkline.protocol.upload import EDIT_BUFFER, build_upload, _upload_message
 from tests.helpers import chime_dump
 
 WINDOWS = Path(__file__).parent.parent / "captures" / "windows"

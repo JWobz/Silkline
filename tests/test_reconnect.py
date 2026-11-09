@@ -14,11 +14,11 @@ import threading
 import time
 import unittest
 
-from spiderweb.amp import Amp
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpError, AmpNotFound, AmpTimeout
-from spiderweb.protocol.messages import DUMP_REQUEST
-from spiderweb.service import AmpService, ConnectionState, EventType
+from silkline.amp import Amp
+from silkline.connection import Connection
+from silkline.errors import AmpError, AmpNotFound, AmpTimeout
+from silkline.protocol.messages import DUMP_REQUEST
+from silkline.service import AmpService, ConnectionState, EventType
 from tests.helpers import (
     ACOUSTIC,
     GAIN_REPORT,

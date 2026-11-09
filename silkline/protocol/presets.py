@@ -11,7 +11,7 @@ which preset it's for, so it is matched to the request it answers by handshake
 line; the message counters drift, so they can't be used.
 """
 
-from spiderweb.protocol.packing import unpack
+from silkline.protocol.packing import unpack
 
 # Presets the amp lists but won't load: selecting them never sends a dump (protocol.md section 8).
 UNLOADABLE = {115}

@@ -11,8 +11,8 @@ this runs.
 import sys
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
 
 DUMP_CHUNK_LENGTH = 309
 DUMP_CHUNK_COUNT = 5

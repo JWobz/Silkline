@@ -1,6 +1,6 @@
 import unittest
 
-from spiderweb.service import AmpService, EventType
+from silkline.service import AmpService, EventType
 from tests.helpers import capture_messages as read_capture
 
 # Real messages from the captures (see protocol.md).

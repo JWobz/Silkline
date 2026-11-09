@@ -41,12 +41,12 @@ import sys
 import time
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpError
-from spiderweb.protocol.dump import DUMP_CHUNK_LENGTH
-from spiderweb.protocol.packing import unpack
-from spiderweb.protocol.parameters import BY_NAME, DUMP_RECORDS, PARAMETERS, Parameter
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.errors import AmpError
+from silkline.protocol.dump import DUMP_CHUNK_LENGTH
+from silkline.protocol.packing import unpack
+from silkline.protocol.parameters import BY_NAME, DUMP_RECORDS, PARAMETERS, Parameter
 
 PRESETS = (4, 8, 0, 14)          # Chime 1: Class-A, Jungle $lash, Bass, Ambient 1: Black Hole
 DEFAULT_PARAMS = ("gain", "drive", "volume", "reverb", "reverb mix", "stomp on", "stomp knob")
@@ -134,10 +134,10 @@ def records(dump):
     """ Every parameter record in a dump, as {"BB:s/rr": (type, value)}, e.g. "2A:0/1f".
 
     Blocks are 3 info records (03 block, 05 kind, 06 count) and then `count` 10-byte
-    parameter records (protocol.md section 3). A block cut off by the end of the full
-    chunks keeps what it has.
+    parameter records (protocol.md section 3). Reads dump.data(), the whole dump: the
+    short last chunk holds the EQ's last records, which dump_stream() leaves out.
     """
-    d, out, o = dump_stream(dump), {}, 0
+    d, out, o = dump.data(), {}, 0
     while o + 30 <= len(d):
         info = [d[o + 10 * i:o + 10 * i + 10] for i in range(3)]
         if not all(r[0] == n and r[3] == 0x80 for r, n in zip(info, (3, 5, 6))):
@@ -202,7 +202,9 @@ class DumpParams:
         if found:
             self.write(f"  {param.name:14} FOUND as record {', '.join(found)}")
         else:
-            self.write(f"  {param.name:14} not found; records that changed: {', '.join(moved) or 'none'}")
+            changes = [f"{key} (type {after[key][0]}: {before.get(key, (None, None))[1]} -> {after[key][1]})"
+                       for key in moved]
+            self.write(f"  {param.name:14} not found; records that changed: {', '.join(changes) or 'none'}")
         self.summary.append((preset, param.name, found, ", ".join(moved) or "none"))
 
     def check_preset(self, value):

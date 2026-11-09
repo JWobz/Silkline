@@ -1,4 +1,4 @@
-from spiderweb.amp import Amp
+from silkline.amp import Amp
 
 def main():
     amp = Amp()

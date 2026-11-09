@@ -17,10 +17,10 @@ import sys
 import time
 from pathlib import Path
 
-import spiderweb.protocol as protocol
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpTimeout
+import silkline.protocol as protocol
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.errors import AmpTimeout
 
 PAUSE = 3.0                   # seconds between presets (a setting of this tool only)
 

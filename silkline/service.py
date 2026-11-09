@@ -19,21 +19,21 @@ _threading_lock guards the state. Events are only sent outside _threading_lock.
 import threading
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpDisconnected, AmpError, AmpTimeout
-from spiderweb.logger import Logger
-from spiderweb.protocol.dump import (
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.errors import AmpDisconnected, AmpError, AmpTimeout
+from silkline.logger import Logger
+from silkline.protocol.dump import (
     DumpCollector,
     preset_data,
     read_values,
 )
-from spiderweb.protocol.knob import settle_position
-from spiderweb.protocol.messages import MessageKind, classify
-from spiderweb.protocol.models import ModelNames
-from spiderweb.protocol.parameters import BY_NAME, KNOWN_PARAMETERS
-from spiderweb.protocol.presets import UNLOADABLE, preset_list_request, preset_names
-from spiderweb.state import AmpState, ConnectionState, Event, EventType
+from silkline.protocol.knob import settle_position
+from silkline.protocol.messages import MessageKind, classify
+from silkline.protocol.models import ModelNames
+from silkline.protocol.parameters import BY_NAME, KNOWN_PARAMETERS
+from silkline.protocol.presets import UNLOADABLE, preset_list_request, preset_names
+from silkline.state import AmpState, ConnectionState, Event, EventType
 
 APP_DATA_FOLDER = (Path(__file__).resolve().parent.parent / "app_data") # The app's res folder
 RECONNECT_DELAYS = (1, 2, 5, 10, 30)    # seconds between failed connects; the last one repeats

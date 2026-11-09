@@ -1,4 +1,4 @@
-"""Model names from the Line 6 app's .models files (spiderweb/protocol/models.py,
+"""Model names from the Line 6 app's .models files (silkline/protocol/models.py,
 protocol.md section 10).
 
 - Made-up .models files, written here, check the rules on any machine.
@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from spiderweb.protocol.models import _CAB_MICS, _load_model_names, _model_name
+from silkline.protocol.models import _CAB_MICS, _load_model_names, _model_name
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_DATA = ROOT / "app_data"      # the Line 6 app's res folder, copied here (never in git)

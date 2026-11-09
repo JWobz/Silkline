@@ -1,0 +1,90 @@
+11:42:54 connecting (about 15 s)...
+11:42:54 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:43:08 event connection_changed {'state': <ConnectionState.CONNECTED: 'connected'>}
+11:43:08 RESULT connect: PASS - 14.1s, preset 'User 1', 127 preset names (115 left out)
+11:43:08 RESULT connect values: PASS - from the dump: {(116, 26, 3): 1.0, (116, 72, 3): 0, (116, 28, 3): 0.243, (116, 71, 3): 0, (116, 30, 3): 0.399, (116, 70, 3): 0, (116, 32, 3): 0.25, (116, 36, 3): 0.31, (116, 74, 3): 0}
+11:45:25 you typed '' for: Press Enter to start (s to skip):
+11:45:25 raw  29 f000010c22054d017500000b00010000000400000000000000000000f7
+11:45:25 raw  45 f000010c22054d000800010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+11:45:25 event preset_changed {'number': 4, 'name': 'Chime 1: Class-A'}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.1}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.2}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.3}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.4}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.5}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.6}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.7}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.8}
+11:45:25 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.9}
+11:45:25 RESULT sliders 4 Chime 1: Class-A: PASS - 9 moves -> 9 sets [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] to (42, 38, 0); get('drive') = 0.9
+11:45:25 RESULT drive pick 4: FAIL - "drive" went to 0x26 (expected 0x25)
+11:45:26 raw  45 f000010c22054d001200010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+11:45:26 RESULT sliders 4 in the amp: PASS - the dump's Drive record: {'2A:0/33': 0.900390625} (expected 0.9)
+11:45:26 raw  29 f000010c22054d017800000b00010000000400000000000000000000f7
+11:45:26 raw  45 f000010c22054d001300010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+11:45:26 event preset_changed {'number': 8, 'name': 'Jungle $lash'}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.1}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.2}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.3}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.4}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.5}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.6}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.7}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.8}
+11:45:26 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.9}
+11:45:26 RESULT sliders 8 Jungle $lash: PASS - 9 moves -> 9 sets [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] to (42, 38, 0); get('drive') = 0.9
+11:45:26 RESULT drive pick 8: PASS - "drive" went to 0x26 (expected 0x26)
+11:45:27 raw  45 f000010c22054d001d00010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+11:45:27 RESULT sliders 8 in the amp: PASS - the dump's Drive record: {'2A:0/33': 0.900390625} (expected 0.9)
+11:45:59 you typed '' for: Press Enter to start (s to skip):
+11:46:03 you typed '' for: Now pull the amp's USB cable out, then press Enter.
+11:46:08 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>, 'error': "OSError(19, 'No such device')"}
+11:46:08 RESULT replug lost: PASS - noticed after 5.8s: OSError(19, 'No such device')
+11:46:08 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:46:08 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:46:09 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:46:09 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:46:11 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:46:11 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:46:16 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:46:16 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:46:23 you typed '' for: Now plug it back in, then press Enter.
+11:46:26 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:46:41 event connection_changed {'state': <ConnectionState.CONNECTED: 'connected'>}
+11:46:41 RESULT replug back: PASS - reconnected 18.2s after Enter, 1 attempt(s), 127 preset names, preset 'Jungle $lash'
+11:46:41 event parameter_changed {'key': (42, 38, 0), 'name': 'Drive', 'value': 0.5}
+11:46:41 RESULT replug set after: PASS - a set works on the new connection
+11:46:43 raw  45 f000010c22054d000900010700030000001000000300020000007f7f607f7f02000000010000000000000000f7
+11:46:53 you typed '' for: Press Enter to start (s to skip):
+11:46:57 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>, 'error': "OSError(19, 'No such device')"}
+11:46:57 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:46:57 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:46:57 you typed '' for: Now switch the amp off (leave the USB in), then press Enter.
+11:46:58 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:46:58 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:46:58 RESULT power lost: PASS - noticed after 0.9s: None
+11:47:00 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:47:00 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:47:05 you typed '' for: Now switch it back on, then press Enter.
+11:47:05 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:47:05 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:47:15 event connection_changed {'state': <ConnectionState.CONNECTING: 'connecting'>}
+11:47:29 event connection_changed {'state': <ConnectionState.CONNECTED: 'connected'>}
+11:47:29 RESULT power back: PASS - reconnected 24.5s after Enter, 2 attempt(s), 127 preset names, preset 'Insane 2: Criminal'
+11:47:29 event parameter_changed {'key': (42, 37, 0), 'name': 'Gain', 'value': 0.5}
+11:47:29 RESULT power set after: PASS - a set works on the new connection
+11:47:29 event connection_changed {'state': <ConnectionState.DISCONNECTED: 'disconnected'>}
+11:47:29 PASS  connect: 14.1s, preset 'User 1', 127 preset names (115 left out)
+11:47:29 PASS  connect values: from the dump: {(116, 26, 3): 1.0, (116, 72, 3): 0, (116, 28, 3): 0.243, (116, 71, 3): 0, (116, 30, 3): 0.399, (116, 70, 3): 0, (116, 32, 3): 0.25, (116, 36, 3): 0.31, (116, 74, 3): 0}
+11:47:29 PASS  sliders 4 Chime 1: Class-A: 9 moves -> 9 sets [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] to (42, 38, 0); get('drive') = 0.9
+11:47:29 FAIL  drive pick 4: "drive" went to 0x26 (expected 0x25)
+11:47:29 PASS  sliders 4 in the amp: the dump's Drive record: {'2A:0/33': 0.900390625} (expected 0.9)
+11:47:29 PASS  sliders 8 Jungle $lash: 9 moves -> 9 sets [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] to (42, 38, 0); get('drive') = 0.9
+11:47:29 PASS  drive pick 8: "drive" went to 0x26 (expected 0x26)
+11:47:29 PASS  sliders 8 in the amp: the dump's Drive record: {'2A:0/33': 0.900390625} (expected 0.9)
+11:47:29 PASS  replug lost: noticed after 5.8s: OSError(19, 'No such device')
+11:47:29 PASS  replug back: reconnected 18.2s after Enter, 1 attempt(s), 127 preset names, preset 'Jungle $lash'
+11:47:29 PASS  replug set after: a set works on the new connection
+11:47:29 PASS  power lost: noticed after 0.9s: None
+11:47:29 PASS  power back: reconnected 24.5s after Enter, 2 attempt(s), 127 preset names, preset 'Insane 2: Criminal'
+11:47:29 PASS  power set after: a set works on the new connection

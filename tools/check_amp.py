@@ -23,11 +23,11 @@ import threading
 import time
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.errors import AmpError
-from spiderweb.protocol.messages import MessageKind, classify
-from spiderweb.service import AmpService, ConnectionState, EventType
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.errors import AmpError
+from silkline.protocol.messages import MessageKind, classify
+from silkline.service import AmpService, ConnectionState, EventType
 
 DRIVE_KEYS = {(0x2A, 0x25, 0), (0x2A, 0x26, 0)}    # Gain and Drive
 WAIT_KNOB = 30.0       # seconds to wait for a knob click

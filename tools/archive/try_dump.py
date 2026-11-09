@@ -1,4 +1,4 @@
-from spiderweb.amp import Amp
+from silkline.amp import Amp
 
 DUMP_REQUEST = bytes.fromhex(
     "f000010c22054d010200000b000b0000000400003c007f7f7f7f0000f7"

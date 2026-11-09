@@ -13,20 +13,19 @@ import threading
 import time
 from pathlib import Path
 
-from spiderweb.connection import Connection
-from spiderweb.logger import Logger
-from spiderweb.protocol.dump import DumpCollector
-from spiderweb.protocol.messages import (
+from silkline.connection import Connection
+from silkline.logger import Logger
+from silkline.protocol.dump import DumpCollector
+from silkline.protocol.messages import (
     DUMP_REQUEST,
     FIRST_SEQUENCE,
-    FLOAT_VALUE,
     SetAnswer,
     UploadAnswer,
     build_begin_message,
     build_set_message,
     select_message,
 )
-from spiderweb.protocol.upload import build_upload
+from silkline.protocol.upload import build_upload
 
 HANDSHAKE_PATH = Path(__file__).parent / "handshake.txt"
 
@@ -102,11 +101,11 @@ class Amp:
             self._upload_seq = (self._upload_seq + 2) % 128
             self._connection.request(msgs, UploadAnswer(), UPLOAD_TIMEOUT, gap=0.01)
 
-    def _set_raw(self, block, sub, param_id, raw5, namespace, value_type=FLOAT_VALUE, unknown=1):
-        """Sets a parameter to a raw five-byte value (protocol.md section 8).
+    def _set_raw(self, block, sub, symbol, value_type, value):
+        """Sets a parameter to a value (protocol.md section 8).
 
-        block, sub, param_id and namespace say which parameter (see
-        build_set_message); the namespace can differ from sub.
+        block, sub and symbol say which parameter, value_type and value (its 4
+        bytes) what to set it to; see build_set_message.
 
         Sends a begin message and then a set message, numbered seq and seq + 1,
         and waits for the amp's answer (the value itself is never reported back).
@@ -118,7 +117,7 @@ class Amp:
         """    
         with self._set_lock:
             msgs = [build_begin_message(self._seq),
-                    build_set_message(self._seq+1, block, sub, param_id, raw5, namespace, value_type, unknown)]
+                    build_set_message(self._seq+1, block, sub, symbol, value_type, value)]
             self._seq = (self._seq + 2) % 128   
             self._connection.request(msgs, SetAnswer(), SET_TIMEOUT)
     
@@ -142,8 +141,8 @@ class Amp:
         """
         if not param.settable:
             raise ValueError(f"Parameter {param.name} is not settable.")
-        raw5, value_type = param.encode(value)
-        self._set_raw(param.block, param.sub, param.id , raw5, param.namespace, value_type)
+        value, value_type = param.encode(value)
+        self._set_raw(param.block, param.sub, param.symbol, value_type, value)
 
     def refresh_preset(self, on_done, timeout=DUMP_TIMEOUT):
         """Asks for the current preset's dump without waiting for it.

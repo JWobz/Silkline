@@ -23,10 +23,10 @@ import threading
 import time
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.protocol.messages import FIRST_SEQUENCE, HEADER, MessageKind, classify
-from spiderweb.protocol.parameters import BY_NAME
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.protocol.messages import FIRST_SEQUENCE, HEADER, MessageKind, classify
+from silkline.protocol.parameters import BY_NAME
 
 DRIVE = BY_NAME["drive"]
 DRIVE_KEYS = {(0x2A, 0x25, 0), (0x2A, 0x26, 0)}    # Drive and Drive (alt), as in check_amp

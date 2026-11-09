@@ -8,10 +8,10 @@ import sys
 import time
 from pathlib import Path
 
-from spiderweb.amp import Amp, load_handshake
-from spiderweb.connection import Connection
-from spiderweb.logger import Logger
-from spiderweb.protocol import KNOWN_PARAMETERS, MessageKind, classify
+from silkline.amp import Amp, load_handshake
+from silkline.connection import Connection
+from silkline.logger import Logger
+from silkline.protocol import KNOWN_PARAMETERS, MessageKind, classify
 
 CHANGE_THRESHOLD = 0.02
 QUIET_SHAPES = {(29, 11, 1)}  # the amp sends these by itself; show each shape once
