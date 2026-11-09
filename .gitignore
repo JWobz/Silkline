@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 
+build/
+*.egg-info/
+
 # The Pi's virtual environment
 venv/
 

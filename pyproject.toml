@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "silkline"
+version = "1.0.0"
+description = "Control a Line 6 Spider V MkII amp over USB (not affiliated with Line 6)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools]
+packages = ["silkline", "silkline.protocol"]
+
+[tool.setuptools.package-data]
+silkline = ["handshake.txt"]

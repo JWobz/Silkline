@@ -26,6 +26,7 @@ from silkline.protocol.messages import FLOAT_VALUE
 from silkline.protocol.values import encode_set_value
 from silkline.protocol.dump import DumpCollector, preset_data
 from silkline.service import AmpService, ConnectionState, EventType
+from silkline.service import APP_DATA_FOLDER
 from tests.test_symbols import make_table
 from tests.helpers import (
     ACOUSTIC,
@@ -804,7 +805,7 @@ def collected(messages):
     return collector
 
 
-APP_DATA = Path(__file__).resolve().parent.parent / "app_data"
+APP_DATA = APP_DATA_FOLDER        # ~/.config/silkline/app_data: the Line 6 app's res folder (never in git)
 
 
 def made_up_app_data(folder):
@@ -882,7 +883,7 @@ class TestModels(ServiceTest):
         service.state().models.clear()
         self.assertEqual(set(service.state().models), self.STAGES)
 
-    @unittest.skipUnless((APP_DATA / "amps.models").exists(), "app_data/ isn't here (the Line 6 app's files are never in git)")
+    @unittest.skipUnless((APP_DATA / "amps.models").exists(), "~/.config/silkline/app_data isn't here (the Line 6 app's files are never in git)")
     def test_the_real_files(self):
         service, fake, events = self.make(handshake_dump=chime_dump(), resource_folder=APP_DATA)
         names = {stage: m["name"] for stage, m in service.state().models.items()}

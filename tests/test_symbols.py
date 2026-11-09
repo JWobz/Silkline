@@ -2,8 +2,8 @@
 
 Two kinds of test:
 - Made-up tables, built here, so the reader's rules are checked on any machine.
-- The real table, app_data/defaultSymbolTable_Parker.bin. It's the app's own file and
-  isn't in git, so those tests skip themselves when the app_data/ folder isn't there.
+- The real table, in ~/.config/silkline/app_data. It's the app's own file and
+  isn't in git, so those tests skip themselves when that folder isn't there.
 """
 import struct
 import tempfile
@@ -11,9 +11,10 @@ import unittest
 from pathlib import Path
 
 from silkline.protocol.symbols import load_symbols
+from silkline.service import APP_DATA_FOLDER
 
 ROOT = Path(__file__).resolve().parent.parent
-APP_DATA = ROOT / "app_data"      # the Line 6 app's res folder, copied here (never in git)
+APP_DATA = APP_DATA_FOLDER        # ~/.config/silkline/app_data: the Line 6 app's res folder (never in git)
 PARKER = APP_DATA / "defaultSymbolTable_Parker.bin"
 
 
@@ -73,7 +74,7 @@ class TestMadeUpTables(TempTable):
             load_symbols(Path(tempfile.gettempdir()) / "no such table.bin")
 
 
-@unittest.skipUnless(PARKER.exists(), "app_data/ isn't here (the Line 6 app's files are never in git)")
+@unittest.skipUnless(PARKER.exists(), "~/.config/silkline/app_data isn't here (the Line 6 app's files are never in git)")
 class TestTheRealTable(unittest.TestCase):
     """ The Spider V MkII's table (protocol.md section 3, "Names: the amp's symbol table"). """
 

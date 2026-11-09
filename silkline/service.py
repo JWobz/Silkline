@@ -35,7 +35,7 @@ from silkline.protocol.parameters import BY_NAME, KNOWN_PARAMETERS
 from silkline.protocol.presets import UNLOADABLE, preset_list_request, preset_names
 from silkline.state import AmpState, ConnectionState, Event, EventType
 
-APP_DATA_FOLDER = (Path(__file__).resolve().parent.parent / "app_data") # The app's res folder
+APP_DATA_FOLDER = Path.home() / ".config" / "silkline" / "app_data" # The app's res folder
 RECONNECT_DELAYS = (1, 2, 5, 10, 30)    # seconds between failed connects; the last one repeats
 _GAIN = BY_NAME["gain"]
 _DRIVE = BY_NAME["drive"]

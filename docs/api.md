@@ -1,12 +1,16 @@
 # Silkline API
 
-`AmpService` (`silkline/service.py`) is the one owner of the amp. The server (phase 8)
-and the tools talk to it only. Everything below `AmpService` (`Amp`, `Connection`,
-`AmpTransport`, `silkline/protocol/`) is internal. The wire format is in
-`docs/protocol.md`.
+`AmpService` (`silkline/service.py`) is the one owner of the amp. Programs and the tools
+talk to it only. Everything below `AmpService` (`Amp`, `Connection`, `AmpTransport`,
+`silkline/protocol/`) is internal. The wire format is in `docs/protocol.md`.
 
-Updated 2026-11-08: real parameter names, on/off switches, `save()` and each stage's model.
-404 tests (`python3 -m unittest`).
+What a program imports, all from the package itself (`silkline/__init__.py`):
+`from silkline import AmpService, AmpState, ConnectionState, Event, EventType,
+APP_DATA_FOLDER, AmpError, AmpDisconnected, AmpTimeout, AmpNotFound`.
+`silkline.__version__` is the version (`"1.0.0"`). Installing is in the README.
+
+Version 1.0.0 (2026-11-09): every knob and switch by name, presets and `save()`, each
+stage's model, reconnecting. 416 tests (`python3 -m unittest`).
 
 ## Starting and stopping
 
@@ -101,12 +105,13 @@ Line 6 Spider V Remote app's own files turn it into a name: `"id"` from its symb
 table (`ClassA30TopBoost`) and `"name"` from its `.models` files ("1967 Class A-30 Top
 Boost"; a cab's name leaves out its mic).
 
-**Those files are Line 6's, so they are never in git** (`.gitignore` has `app_data/`).
-To get names, install the free Spider V Remote app and copy its `res` folder to
-`app_data/` in the project:
+**Those files are Line 6's, so they are never in git.** To get names, install the free
+Spider V Remote app and copy its `res` folder to `APP_DATA_FOLDER`,
+`~/.config/silkline/app_data` (or pass another folder as `resource_folder`):
 ```
-scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" pi@raspberrypi:~/silkline/app_data
+scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" pi@raspberrypi:~/.config/silkline/app_data
 ```
+(`.gitignore` still lists `app_data/`, in case the files are ever copied into the project.)
 Without the folder the service still works: a warning is logged and `"id"` and `"name"`
 are `None`. Stages people can't pick (the panel, 74:3, and 21:3) are left out.
 

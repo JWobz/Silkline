@@ -2,8 +2,8 @@
 protocol.md section 10).
 
 - Made-up .models files, written here, check the rules on any machine.
-- The real files in app_data/ (the app's own, never in git) check the names of models
-  seen in the captures; those tests skip themselves when app_data/ isn't there.
+- The real files in ~/.config/silkline/app_data (the app's own, never in git) check the names of models
+  seen in the captures; those tests skip themselves when ~/.config/silkline/app_data isn't there.
 """
 import json
 import tempfile
@@ -11,9 +11,10 @@ import unittest
 from pathlib import Path
 
 from silkline.protocol.models import _CAB_MICS, _load_model_names, _model_name
+from silkline.service import APP_DATA_FOLDER
 
 ROOT = Path(__file__).resolve().parent.parent
-APP_DATA = ROOT / "app_data"      # the Line 6 app's res folder, copied here (never in git)
+APP_DATA = APP_DATA_FOLDER        # ~/.config/silkline/app_data: the Line 6 app's res folder (never in git)
 
 
 class MadeUpFolder(unittest.TestCase):
@@ -86,7 +87,7 @@ class TestModelName(unittest.TestCase):
         self.assertIsNone(_model_name("DoubleVerb", {}))
 
 
-@unittest.skipUnless((APP_DATA / "amps.models").exists(), "app_data/ isn't here (the Line 6 app's files are never in git)")
+@unittest.skipUnless((APP_DATA / "amps.models").exists(), "~/.config/silkline/app_data isn't here (the Line 6 app's files are never in git)")
 class TestTheRealFiles(unittest.TestCase):
     """ The app's files, against the models in the captures (2026-11-08 survey). """
 
