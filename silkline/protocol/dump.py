@@ -109,6 +109,21 @@ def read_values(dump):
     """The known parameters' values in a dump, as {wire key: value}."""
     return {DUMP_RECORDS[key]: value for key, value in records(dump.data()).items() if key in DUMP_RECORDS}
 
+def read_tempo(dump):
+    """The preset's tempo in BPM (header record 3, protocol.md section 3), or None."""
+    data, name = dump.data(), dump.name()
+    if not name:
+        return None
+    at = data.find(name.encode())
+    if at < 0:
+        return None
+    start = at + len(name) + 1
+    for o in range(start, start + 80, 10):
+        r = data[o:o+10]
+        if len(r) == 10 and r[0] == 3 and r[4] == 3:
+            return struct.unpack("<f", r[6:10])[0]  
+    return None
+
 def stage_models(dump):
     """Each stage's model number in a dump, as {stage: model}, e.g. {"amp": 0xDC, ...}.
 

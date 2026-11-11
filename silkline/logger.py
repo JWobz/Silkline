@@ -23,11 +23,15 @@ class _Color:
 
 class Logger:
     """ A simple logger that prints messages with timestamps and optional colors. """
+    enabled = True
+
     def __init__(self, prefix: str = ""):
         self.prefix = f"{prefix} " if prefix else ""
 
     def _log(self, text: str, color: str = _Color.RESET):
         """ Logs a message with a timestamp. """
+        if not Logger.enabled:
+            return
         timestamp = f"{_Color.GRAY}{time.strftime('%H:%M:%S')}{_Color.RESET}"
         prefix_str = f"{_Color.BOLD}{self.prefix}{_Color.RESET}" if self.prefix else ""
         print(f"{timestamp} {prefix_str}{color}{text}{_Color.RESET}")

@@ -10,7 +10,7 @@ APP_DATA_FOLDER, AmpError, AmpDisconnected, AmpTimeout, AmpNotFound`.
 `silkline.__version__` is the version (`"1.0.0"`). Installing is in the README.
 
 Version 1.0.0 (2026-11-09): every knob and switch by name, presets and `save()`, each
-stage's model, reconnecting. 416 tests (`python3 -m unittest`).
+stage's model, reconnecting, and the `silkline` command (`silkline/cli.py`, README). 551 tests (`python3 -m unittest`).
 
 ## Starting and stopping
 
@@ -32,7 +32,7 @@ runs on the reader thread).
 | `set_latest(name, value)` | – | **What phone sliders use.** Like `set()`, but if a set is already being sent it returns at once and the value waits; a newer value for the same parameter replaces it. So a drag becomes a few sets: the first, then the newest each time the amp answers. `ValueError` and `AmpDisconnected` are raised at once; errors while sending are only logged (a timeout also reconnects). |
 | `get(name)` | float or `None` | The value from the latest dump (the handshake, a select or a knob click), or a later set or knob report. `"gain"` and `"drive"` read whichever of the two the preset uses (see Gain and Drive below). `None` for a parameter with no value yet. |
 | `select_preset(n)` | name | `n` = an index in `presets()`. Waits for the dump (up to 4 s). Nothing is saved on the amp. `ValueError` at once for 115 (the amp won't load it) or anything outside 0 to 127. |
-| `save()` | name | **Overwrites the loaded preset on the amp** with how it is now (every set included): takes a fresh dump, uploads it to the slot `select_preset()` loaded, reads it back and sends `PRESET_SAVED`. Can't be undone. `ValueError` if the slot isn't known (after the handshake or a preset-knob move: call `select_preset()` first). Not yet tried on the amp: try it on a preset you don't mind losing. |
+| `save()` | name | **Overwrites the loaded preset on the amp** with how it is now (every set included): takes a fresh dump, uploads it to the slot `select_preset()` loaded, reads it back and sends `PRESET_SAVED`. Can't be undone. `ValueError` if the slot isn't known (a preset whose slot can't be told, at connect or after a knob move: call `select_preset()` first). Checked on the amp (2026-11-11). |
 | `presets()` | `{index: name}` | The 127 loadable presets' names, read from the handshake (115 is left out). A copy. |
 | `state()` | `AmpState` | A copy of everything below. |
 | `on_change(callback)` | – | `callback(event)` for every `Event`. Keep it quick. |
@@ -48,12 +48,12 @@ an unknown or unsettable parameter, or a value out of range.
 | Field | Meaning |
 |---|---|
 | `connection` | `ConnectionState.DISCONNECTED`, `CONNECTING` or `CONNECTED` |
-| `preset_number` | the last `select_preset()` value; `None` after a knob move or a reconnect (which knob position loads which preset is in protocol.md section 11) |
+| `preset_number` | the slot loaded: from `select_preset()`, or after a knob click the knob slot (0 to 15) with the loaded preset's name. At connect, the same from the handshake's preset, but the number only if no other of the 128 presets has its name (the amp may have any preset loaded). `None` when it can't be told: a name not in slots 0 to 15, or a duplicate the click doesn't settle (protocol.md section 11) |
 | `preset_name` | from the handshake dump, `select_preset()`, or the refresh after a knob move |
-| `knob_position` | 0 to 15, once the preset knob has settled (the knob's marking 16 is 0) |
+| `knob_position` | 0 to 15 at connect and after a click (the knob's marking 16 is 0): slot − 8 from the loaded preset, or the bounce rule's guess when the slot can't be told |
 | `params` | `{(block, id, namespace): value}`: read from each dump (`read_values`, protocol.md section 3), then updated by sets and knob reports. Replaced on every select, knob click and reconnect. On/off switches are 0 or 1 |
 | `models` | `{stage: {"number": n, "id": str or None, "name": str or None}}` for the 11 stages (`"gate"`, `"vol"`, `"wah"`, `"stomp"`, `"mod"`, `"delay"`, `"reverb"`, `"amp"`, `"cab"`, `"comp"`, `"eq"`), from every dump, like `params`. See Model names below |
-| `bpm` | from the tap button |
+| `bpm` | the preset's saved tempo from every dump (header record 3, protocol.md section 3), then the tap button |
 
 ## Events
 
@@ -126,8 +126,10 @@ treat both as the same control. Before any dump, the one asked for is sent.
 ## Rules the service follows (protocol.md)
 
 - Knob reports count only when they move by 0.02 or more; 2A/02 is ignored.
-- The preset-knob position is settled at the status message that follows a click (contact
-  bounce, section 11), and then the new preset's name is read from a dump.
+- The preset knob is slots 0 to 15 (marking m loads slot (m + 8) % 16). After a click the
+  loaded preset is read from a dump, and its name says the slot and the position;
+  the bounce rule (section 11) is only a fallback. `KNOB_MOVED` comes just before
+  `PRESET_CHANGED`.
 - The amp never reports a set back, so a set's value is what was sent.
 
 ## Not done yet

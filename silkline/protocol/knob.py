@@ -30,3 +30,17 @@ def _complement_position(position):
     """The position a bounced reading of `position` would give (raw value XOR 0x0F)."""
     raw = (position + 8) % POSITIONS
     return ((raw ^ 0x0F) - 8) % POSITIONS
+
+def find_slot(name, presets, last_position):
+    """The slot (0 to 15) the knob loaded, or None if it can't be told."""
+    matches = [n for n in range(POSITIONS) if presets.get(n) == name]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) < 2 or last_position is None:
+        return None     
+    slot = (last_position + 8) % POSITIONS
+    options = [s for s in (slot, slot ^ 0x0F) if s in matches]
+    if len(options) == 1:
+        return options[0]
+    else:
+        return None 

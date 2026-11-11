@@ -26,9 +26,10 @@ from silkline.logger import Logger
 from silkline.protocol.dump import (
     DumpCollector,
     preset_data,
+    read_tempo,
     read_values,
 )
-from silkline.protocol.knob import settle_position
+from silkline.protocol.knob import find_slot, settle_position
 from silkline.protocol.messages import MessageKind, classify
 from silkline.protocol.models import ModelNames
 from silkline.protocol.parameters import BY_NAME, KNOWN_PARAMETERS
@@ -70,6 +71,8 @@ class AmpService:
         self._reconnect_delays = reconnect_delays
         self._handshake_replies = []
         self._callbacks = []
+        self._knob_guess = None
+        self._knob_last = None
         self._knob_candidates = []
         self._presets = {}
         self._pending = {}  # set_latest: param key -> (param, value) not sent yet
@@ -91,7 +94,8 @@ class AmpService:
         """Makes the amp, connects and runs the handshake. Does nothing unless DISCONNECTED.
 
         Closes an amp left over from a loss first. The preset name comes from
-        the dump the handshake asks for, and the preset list (presets()) from
+        the dump the handshake asks for (its name in knob slots 0 to 15 gives
+        knob_position, and preset_number if no other preset has that name), and the preset list (presets()) from
         its preset-list requests, so no extra request is needed. Handshake
         replies aren't treated as changes. Parameter values and preset_number
         are cleared, because after a power-cycle the amp has reloaded its preset.
@@ -132,12 +136,19 @@ class AmpService:
                     self._presets = presets
                     self._state.preset_number = None
                     if collector.complete():
-                        self._state.preset_name = collector.name()
+                        name = collector.name()
+                        slot = find_slot(name, presets, None)
+                        self._state.preset_name = name
+                        self._state.knob_position = (slot - 8) % 16 if slot is not None else None
+                        if list(presets.values()).count(name) == 1:
+                            self._state.preset_number = slot
                         self._state.params = read_values(collector)
+                        self._state.bpm = read_tempo(collector)
                         self._state.models = self._model_names.describe(collector)
                     else:
                         self._state.params = {}
                         self._state.models = {}
+                        self._state.bpm = None
 
             except Exception:
                 if self._amp is not None:
@@ -380,6 +391,7 @@ class AmpService:
             self._state.preset_number = n
             self._state.preset_name = name
             self._state.params = read_values(dump)
+            self._state.bpm = read_tempo(dump)
             self._state.models = self._model_names.describe(dump)
         self._emit(EventType.PRESET_CHANGED, {"number": n, "name": name})
         return name
@@ -415,9 +427,11 @@ class AmpService:
         The connection's listener, so it runs on the reader thread.
         - Parameter reports count only when they move by 0.02 or more (knob jitter),
           and 2A/02 is ignored (protocol.md section 7).
-        - Preset-knob positions bounce while it turns; the position is settled at
-          the status message that follows, and then the new preset's name is asked
-          for with refresh_preset (the waiting kind isn't allowed here).
+        - Preset-knob positions bounce while it turns. At the status message that
+          follows, the bounce rule's guess and the last reading are kept, and the
+          loaded preset is asked for with refresh_preset (the waiting kind isn't
+          allowed here); _on_preset_dump then decides the slot and position. If
+          the amp is busy, the guess is used.
         - Everything else (preset-list entries, unknown shapes) is ignored.
         The state changes inside the lock; the amp is asked and events are sent after it.
         """
@@ -453,12 +467,9 @@ class AmpService:
                 case MessageKind.STATUS:
                     if not self._knob_candidates:
                         return
-                    knob_position = settle_position(
-                        self._knob_candidates, self._state.knob_position
-                    )
-                    self._state.knob_position = knob_position
+                    self._knob_guess = settle_position(self._knob_candidates, self._state.knob_position)
+                    self._knob_last = self._knob_candidates[-1]
                     self._knob_candidates = []
-                    events.append((EventType.KNOB_MOVED, {"position": knob_position}))
                     knob_settled = True
                 case MessageKind.TAP:
                     bpm = classified_message[1]
@@ -472,6 +483,9 @@ class AmpService:
         if knob_settled and self._amp is not None:
             if not self._amp.refresh_preset(self._on_preset_dump):
                 self._logger.warning("busy, preset name not refreshed")
+                with self._threading_lock:
+                    self._state.knob_position = self._knob_guess
+                self._emit(EventType.KNOB_MOVED, {"position": self._knob_guess})
 
         for event_type, event_data in events:
             self._emit(event_type, event_data)
@@ -479,19 +493,31 @@ class AmpService:
     def _on_preset_dump(self, dump):
         """on_done for the refresh after a knob move (reader thread).
 
-        A complete dump sets the preset name, clears preset_number and sends
-        PRESET_CHANGED. An incomplete one (timed out) changes nothing.
+        The loaded preset's name says which slot the knob loaded (find_slot: the
+        knob is slots 0 to 15, protocol.md section 11), and so the position:
+        slot - 8. A complete dump sets the name, preset_number (None if the slot
+        can't be told), the position, the values and models, then sends
+        KNOB_MOVED and PRESET_CHANGED. If it can't be told, or the dump is
+        incomplete (timed out), the position is the bounce rule's guess.
         """
         if dump.complete():
             name = dump.name()
+            slot = find_slot(name, self._presets, self._knob_last)
+            position = (slot - 8) % 16 if slot is not None else self._knob_guess
             with self._threading_lock:
                 self._state.preset_name = name
-                self._state.preset_number = None
+                self._state.preset_number = slot
+                self._state.knob_position = position
                 self._state.params = read_values(dump)
+                self._state.bpm = read_tempo(dump)
                 self._state.models = self._model_names.describe(dump)
-            self._emit(EventType.PRESET_CHANGED, {"number": None, "name": name})
+            self._emit(EventType.KNOB_MOVED, {"position": position})
+            self._emit(EventType.PRESET_CHANGED, {"number": slot, "name": name})
         else:
             self._logger.warning("Preset dump is incomplete")
+            with self._threading_lock:
+                self._state.knob_position = self._knob_guess
+            self._emit(EventType.KNOB_MOVED, {"position": self._knob_guess})
 
     def _handle_lost(self, error):
         """Called once by the connection when the amp stops responding (reader thread).
@@ -540,7 +566,8 @@ class AmpService:
         differ) and sends PRESET_SAVED. It overwrites that preset on the amp; it
         can't be undone. Don't call it from an on_change callback.
         Raises AmpDisconnected if not connected, ValueError if the slot isn't known
-        (after the handshake or a knob move: select a preset first), AmpTimeout if
+        (after the handshake, or a knob move to a preset whose slot can't be told:
+        select a preset first), AmpTimeout if
         the amp doesn't answer (no event is sent then).
         """
         amp = self._amp

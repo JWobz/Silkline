@@ -262,6 +262,28 @@ are into the 259-bytes-per-chunk view (1295 bytes).
   two (the first baseline and the "Drive" capture) and not in the other two (see
   section 9).
 
+### The header records: tempo (found 2026-11-11)
+
+Before the first block, the dump has the preset's name and then a few records in the
+usual 10-byte shape (`id, 0, 0, 0, type, 0, value`), starting right after the name's
+0 byte. They match the `global` section of the app's tone files:
+
+| id | type | Value (13 presets in `captures/preset_select_2.txt`) | Probably |
+|---|---|---|---|
+| 1 | 2 | varies (`0x1E23D4`, ...) | unknown |
+| 2 | 2 | 0 | unknown |
+| **3** | **3 (float)** | **120, 96, 125, 139.35, 171.47, 30.44 ...** | **`@tempo`, in BPM** |
+| 4 | 7 | `0x374`, `0x31B` | `@tweakgroup` (a block: 74:3 reverb, 1B:3) |
+| 5 | 7 | `0x31E`, `0x31C`, `0x1A8` | `@tweakparam`? (a block word) |
+| 6 | 3 | 0.8 | `@tweakmax`? |
+| 7 | 3 | 0.0 | `@tweakmin`? |
+
+- **Tempo is record 3** (inferred): the values are plausible tempos, and the app's
+  default preset has `@tempo` 142.563, a float like these. Not yet checked: that a tap
+  changes it in a fresh dump, and that saving keeps it.
+- So the BPM is known from every dump (connect, select, knob click), not only after
+  the tap button. A tap message (section 4) still gives the live value.
+
 ## 4. Messages from the amp
 
 | Shape (len, msg[11], msg[13]) | Extra check              | Meaning                    | Status |
@@ -894,6 +916,8 @@ These are the app's own files, used here only as reference. **Do not commit them
 
 ### Position → name table (confirmed 2026-11-07, `captures/amp_survey_2.txt`)
 
+**Markings 3 and 6 are wrong here** (bounce errors): see the next part.
+
 Walked through markings 1 to 16, one click each, with the bounce rule and the refreshed
 name from `AmpService`. Every click settled on the expected position.
 
@@ -915,6 +939,27 @@ name from `AmpService`. Every click settled on the expected position.
 - Turning a knob near marking 11 sent a run of Drive (alt) reports (0.44 down to 0.0) on
   Clean 2. Probably a physical knob was touched; it shows that knob turns are reported
   live with the id the preset uses.
+
+### The knob loads slots 0 to 15 (confirmed 2026-11-11, with the silkline command)
+
+- **Marking m loads preset-list slot (m + 8) % 16**, and position p is slot (p + 8) % 16:
+  marking 8 is slot 0 (Bass), marking 16 slot 8 (Jungle $lash), marking 1 slot 9. The
+  raw click value in `msg[26]` is the slot itself; position = slot - 8.
+- **The knob presets are the saved slots,** not a copy or a separate favourites list.
+  `preset 4`, Bass from 0.55 to 0.9, `save`: turning the knob to Chime 1 then read bass
+  0.90. So what a knob position loads changes only when something is saved into its slot.
+- All 16 checked against the preset list: slots 0 to 15 match the table above, with
+  marking 3 = Insane 2: Criminal (slot 11, bass 0.67, between Lunatic and Vibe 1 while
+  turning) and marking 6 = Ambient 1: Black Hole (slot 14). The table above has Chime 1
+  and Acoustic there: those are slots 4 and 1, the 4-bit complements of 11 and 14, so
+  they were the bounce rule picking the wrong value of a pair, not the amp.
+- **The bounce rule is not reliable** beyond slow single clicks: on 2026-11-11 it gave
+  Criminal as position 2 once and 3 another time, and a long turn ending on Chime 1
+  (marking 12, slot 4) as position 3 (the complement of 12). **The dump is the truth**:
+  after each click the service reads the loaded preset, and its name found among slots
+  0 to 15 gives both the slot and the position. The 16 names are all different on the
+  test amp; a name that isn't found (renamed in the app since the connect, say) leaves
+  only the bounce rule's guess.
 
 ### Old position → name table (2026-10-30)
 

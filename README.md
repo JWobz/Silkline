@@ -1,6 +1,6 @@
 # Silkline
 
-A Python library for controlling a **Line 6 Spider V MkII** amp over USB: read and set
+A Python library and command for controlling a **Line 6 Spider V MkII** amp over USB: read and set
 every knob and switch, load and save presets, see each stage's model, and follow what
 happens on the amp itself (knob turns, the preset knob, the tap button), with automatic
 reconnecting when the amp is unplugged or switched off.
@@ -48,6 +48,45 @@ scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" pi@raspberrypi:~/.conf
 ```
 
 Without them everything still works; models just have numbers instead of names.
+
+## The silkline command
+
+Installing also gives you a `silkline` command (or `python3 -m silkline`). It connects
+straight away, logging each try until the amp answers, then gives you a prompt:
+
+```
+$ silkline
+(the SILKLINE title and a waveform, in red)
+16:02:11 connecting
+16:02:26 connected
+connected. log lines hidden: "log on" shows them. "help" lists the commands.
+silkline> preset jungle
+Found preset 8 Jungle $lash
+Preset Loaded: Jungle $lash
+silkline> set bass 0.3
+bass: 0.3
+silkline> off reverb
+reverb on, off
+```
+
+| Command | What it does |
+|---|---|
+| `status` | the connection, the loaded preset and knob position, the tap tempo |
+| `presets [text]` | list the presets, or only those whose name contains `text` |
+| `preset <number or name>` | load a preset: `preset 8`, `preset jungle` (nothing is saved) |
+| `preset_knob` | the 16 presets on the amp's preset knob, and where the knob is now |
+| `get <name>` / `set <name> <value>` | read or change a parameter: `set eq low-mid gain 0.7` |
+| `on <stage>` / `off <stage>` | switch a stage on or off: `off delay` |
+| `params [text]` | every parameter and its value, or only matching ones: `params eq` |
+| `models` | each stage's model in the loaded preset |
+| `save` | overwrite the loaded preset on the amp (asks first; can't be undone) |
+| `watch on` / `watch off` | show knob turns, the preset knob and taps as they happen |
+| `log on` / `log off` | show or hide the library's log lines |
+| `help [command]` | the commands, or one command's help |
+| `exit` / `quit` | disconnect and leave (Ctrl-D and Ctrl-C work too) |
+
+Names are any case, Tab completes commands and parameter and preset names, and a
+mistyped command gets a suggestion.
 
 ## A first example
 

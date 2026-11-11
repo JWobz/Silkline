@@ -8,8 +8,10 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
+from silkline.protocol.dump import DumpCollector
 from silkline.amp import Amp
 from silkline.connection import Connection
 from silkline.errors import AmpDisconnected, AmpTimeout
@@ -406,8 +408,66 @@ class TestKnobRefresh(ServiceTest):
         self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PRESET_CHANGED))
         self.assertEqual(fake.sent, [DUMP_REQUEST])
 
+    def knob_presets(self, service, presets):
+        """ Slots as the handshake would have listed them. """
+        service._presets = dict(presets)
+
+    def test_the_name_gives_the_slot_and_position(self):
+        # first_click() reads position 1, but the dump says Chime 1, which is slot 4:
+        # the dump wins, so the number is 4 and the position 12.
+        service, fake, events = self.make(dump=chime_dump())
+        self.knob_presets(service, {4: "Chime 1: Class-A", 9: "Chunk 2: Phat Chunk"})
+        fake.arrive(*first_click())
+        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PRESET_CHANGED))
+        self.assertEqual(events.of(EventType.PRESET_CHANGED)[0].data, {"number": 4, "name": "Chime 1: Class-A"})
+        self.assertEqual(events.of(EventType.KNOB_MOVED)[0].data, {"position": 12})
+        state = service.state()
+        self.assertEqual((state.preset_number, state.knob_position), (4, 12))
+
+    def test_a_duplicate_uses_the_click(self):
+        # Chime 1 at slots 4 and 9: the click read position 1, which is slot 9.
+        service, fake, events = self.make(dump=chime_dump())
+        self.knob_presets(service, {4: "Chime 1: Class-A", 9: "Chime 1: Class-A"})
+        fake.arrive(*first_click())
+        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PRESET_CHANGED))
+        state = service.state()
+        self.assertEqual((state.preset_number, state.knob_position), (9, 1))
+
+    def test_knob_position_comes_before_the_preset(self):
+        service, fake, events = self.make(dump=chime_dump())
+        self.knob_presets(service, {4: "Chime 1: Class-A"})
+        fake.arrive(*first_click())
+        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PRESET_CHANGED))
+        kinds = [e.event_type for e in events.events if e.event_type in (EventType.KNOB_MOVED, EventType.PRESET_CHANGED)]
+        self.assertEqual(kinds, [EventType.KNOB_MOVED, EventType.PRESET_CHANGED])
+
+    def test_save_works_after_a_knob_move(self):
+        service, fake, events = self.make(dump=chime_dump())
+        self.knob_presets(service, {4: "Chime 1: Class-A"})
+        fake.arrive(*first_click())
+        self.assertTrue(events.wait_for(lambda e: e.event_type == EventType.PRESET_CHANGED))
+        self.assertEqual(service.state().preset_number, 4)    # what save() checks
+
+    def test_an_incomplete_dump_keeps_the_guess(self):
+        service, fake, events = self.make(dump=chime_dump())
+        service._knob_guess = 5
+        service._on_preset_dump(DumpCollector())
+        self.assertEqual(service.state().knob_position, 5)
+        self.assertEqual(events.of(EventType.KNOB_MOVED)[-1].data, {"position": 5})
+
+    def test_fallback_events_are_sent_outside_the_lock(self):
+        # A callback that calls state() while the lock is held would wait forever
+        # (it's a plain Lock), so events must be sent after the lock is let go.
+        service, fake, events = self.make(dump=chime_dump())
+        service._knob_guess = 5
+        held = []
+        service.on_change(lambda e: held.append(service._threading_lock.locked()))
+        service._on_preset_dump(DumpCollector())
+        self.assertTrue(held)
+        self.assertEqual(held, [False] * len(held), "an event was sent while holding the lock")
+
     def test_knob_refresh_clears_the_select_number(self):
-        # The number is a select value; after a knob move we don't know it any more.
+        # An unknown name (here: no preset list): after a knob move the number isn't known.
         service, fake, events = self.make(dump=bass_dump())
         service.select_preset(0)
         self.replies.dump = chime_dump()
@@ -767,8 +827,8 @@ class TestSave(ServiceTest):
         self.assertEqual(events.of(EventType.PRESET_SAVED)[-1].data, {"number": 0, "name": "Bass"})
 
     def test_refuses_when_the_slot_isnt_known(self):
-        # After the handshake (or a knob move) preset_number is None: saving could
-        # overwrite the wrong preset, so nothing is sent.
+        # The handshake's preset isn't in the preset list here, so preset_number is
+        # None: saving could overwrite the wrong preset, so nothing is sent.
         service, fake, events = self.make_save(handshake_dump=chime_dump(), dump=chime_dump())
         with self.assertRaises(ValueError):
             service.save()
@@ -889,6 +949,60 @@ class TestModels(ServiceTest):
         names = {stage: m["name"] for stage, m in service.state().models.items()}
         self.assertEqual((names["amp"], names["gate"], names["cab"]),
                          ("1967 Class A-30 Top Boost", "Noise Gate", "2x12 Class A"))
+
+
+class TestKnobAtConnect(ServiceTest):
+    """ start(): the handshake dump's name gives the knob position (find_slot), and the
+    preset number too when that name is in the whole preset list only once. """
+
+    def connect(self, presets, before=None):
+        service, fake, events = self.make(handshake_dump=chime_dump(), dump=chime_dump(), start=False)
+        if before is not None:
+            service._state.knob_position = before            # left over from an earlier connection
+        with mock.patch("silkline.service.preset_names", return_value=presets):
+            service.start()
+        state = service.state()
+        return state.preset_number, state.knob_position
+
+    def test_a_unique_knob_preset(self):
+        self.assertEqual(self.connect({4: "Chime 1: Class-A", 9: "Chunk 2: Phat Chunk"}), (4, 12))
+
+    def test_a_preset_off_the_knob(self):
+        self.assertEqual(self.connect({40: "Chime 1: Class-A", 9: "Chunk 2: Phat Chunk"}), (None, None))
+
+    def test_a_duplicate_on_the_knob(self):
+        # No click to tell slots 4 and 9 apart.
+        self.assertEqual(self.connect({4: "Chime 1: Class-A", 9: "Chime 1: Class-A"}), (None, None))
+
+    def test_a_duplicate_off_the_knob_keeps_the_mark_but_not_the_number(self):
+        # It might be #40 that's loaded, so save() mustn't trust slot 4.
+        self.assertEqual(self.connect({4: "Chime 1: Class-A", 40: "Chime 1: Class-A"}), (None, 12))
+
+    def test_an_old_position_is_cleared(self):
+        self.assertEqual(self.connect({40: "Chime 1: Class-A"}, before=7), (None, None))
+
+    def test_save_works_straight_after_connecting(self):
+        number, _ = self.connect({4: "Chime 1: Class-A"})
+        self.assertEqual(number, 4)                            # what save() checks
+
+
+class TestTempoFromDumps(ServiceTest):
+    """ AmpState.bpm comes from every dump (read_tempo), not only the tap button. """
+
+    def test_at_connect(self):
+        service, fake, events = self.make(handshake_dump=chime_dump())
+        self.assertAlmostEqual(service.state().bpm, 139.35, places=2)
+
+    def test_after_a_select(self):
+        service, fake, events = self.make(handshake_dump=chime_dump(), dump=bass_dump())
+        service.select_preset(0)
+        self.assertAlmostEqual(service.state().bpm, 120.0, places=2)
+
+    def test_an_incomplete_handshake_dump_clears_it(self):
+        service, fake, events = self.make(start=False)
+        service._state.bpm = 99.0                          # from an earlier connection
+        service.start()
+        self.assertIsNone(service.state().bpm)
 
 
 if __name__ == "__main__":

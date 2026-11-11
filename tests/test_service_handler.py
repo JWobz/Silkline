@@ -31,13 +31,18 @@ def make_service():
 
 
 class TestHandleMessage(unittest.TestCase):
-    def test_preset_clicks_give_sixteen_knob_moves(self):
+    def test_preset_clicks_give_sixteen_guesses(self):
+        # Each click's status message settles a guess (the bounce rule); the position
+        # itself now waits for the preset's dump (test_service_amp.TestKnobRefresh).
         service, recorder = make_service()
+        guesses = []
         for msg in read_capture("preset_clicks.txt"):
+            before = service._knob_candidates[:]
             service._handle_message(msg)
-        positions = [e.data["position"] for e in recorder.of(EventType.KNOB_MOVED)]
-        self.assertEqual(positions, list(range(1, 16)) + [0])
-        self.assertEqual(service.state().knob_position, 0)
+            if before and not service._knob_candidates:
+                guesses.append(service._knob_guess)
+                service._state.knob_position = service._knob_guess    # what the dump would set
+        self.assertEqual(guesses, list(range(1, 16)) + [0])
 
     def test_small_jitter_is_ignored(self):
         service, recorder = make_service()
