@@ -152,3 +152,9 @@ python3 -m unittest          # the tests: no amp needed, they use real captures
 - `tools/`: the scripts used to work out the protocol and check it on a real amp
   (`finish_check`, `dump_params`, `send`, `console`, `watch`, `pcap_to_text`).
 - `captures/`: the recordings the tests and the protocol notes rely on.
+
+## Licence
+
+MIT: see [LICENSE](LICENSE). Use it, change it and share it, keeping the copyright
+notice. The Line 6 app's files that give model names are Line 6's, not part of
+Silkline, and aren't covered by this licence (see Model names above).

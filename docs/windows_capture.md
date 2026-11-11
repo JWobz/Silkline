@@ -17,7 +17,7 @@ what you did, in order. Afterwards I decode the files.
    installer, **tick "Install USBPcap"**. That's the part that records USB. Restart the
    PC when it asks.
 2. **Make a folder for the files:**
-   `captures\windows (inside your copy of this repo)`
+   `captures\windows` inside your copy of this repo.
 3. **Open `notes.txt` in that folder** in Notepad. You'll write down each step as you do it.
 
 ## Setting up
