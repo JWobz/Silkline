@@ -4,6 +4,9 @@ Working notes from reverse-engineering the amp over USB-MIDI. Status tags:
 **confirmed** = tested on the amp, **inferred** = a guess that fits the data,
 **unknown** = not understood yet. Last updated 2026-11-06.
 
+"The Pi" in these notes means the Linux computer running Silkline (a Raspberry Pi
+was used for all the testing); any Linux computer works the same way.
+
 ## 1. Connection
 
 - The amp is a class-compliant USB-MIDI device. On the Pi the raw device is

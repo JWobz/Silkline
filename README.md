@@ -14,7 +14,7 @@ Raspberry Pi with a Spider V 20 MkII.
 
 ## What it needs
 
-- **Linux** (a Raspberry Pi works well), with **Python 3.10 or newer**. Nothing else to
+- **Any Linux computer** (a desktop, a laptop or a Raspberry Pi), with **Python 3.10 or newer**. Nothing else to
   install: Silkline only uses Python's own modules.
 - The amp connected by **USB** and switched on.
 - Permission to use the amp's MIDI device (`/dev/snd/midiC*D0`). On most systems that
@@ -41,10 +41,11 @@ pip install "git+https://github.com/JWobz/silkline.git@v1.0"
 The amp only says which model each stage uses as a number. To show names like "1965
 Double Verb", Silkline reads the **free Spider V Remote app's own files**. They're Line
 6's, so they aren't part of this repo: copy the app's `res` folder to
-`~/.config/silkline/app_data`. From a Windows PC with the app installed:
+`~/.config/silkline/app_data` on the computer that runs Silkline. From a Windows PC
+with the app installed (replace `you@your-linux-pc` with that computer's login):
 
 ```bash
-scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" pi@raspberrypi:~/.config/silkline/app_data
+scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" you@your-linux-pc:~/.config/silkline/app_data
 ```
 
 Without them everything still works; models just have numbers instead of names.

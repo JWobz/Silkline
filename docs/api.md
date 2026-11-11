@@ -109,7 +109,7 @@ Boost"; a cab's name leaves out its mic).
 Spider V Remote app and copy its `res` folder to `APP_DATA_FOLDER`,
 `~/.config/silkline/app_data` (or pass another folder as `resource_folder`):
 ```
-scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" pi@raspberrypi:~/.config/silkline/app_data
+scp -r "/c/Program Files (x86)/Line6/Spider V Remote/res" you@your-linux-pc:~/.config/silkline/app_data
 ```
 (`.gitignore` still lists `app_data/`, in case the files are ever copied into the project.)
 Without the folder the service still works: a warning is logged and `"id"` and `"name"`

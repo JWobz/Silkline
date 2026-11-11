@@ -9,7 +9,10 @@ still needs (protocol.md section 3 and section 8):
 3. **Save:** the message that saves a preset.
 
 You record the amp's USB traffic with Wireshark while using the app, and write down
-what you did, in order. Afterwards I decode the files.
+what you did, in order. Afterwards the files are decoded with `tools/pcap_to_text.py`.
+
+"The Pi" in this guide means the Linux computer running Silkline (a Raspberry Pi
+was used for all the testing); any Linux computer works the same way.
 
 ## Before you start (once)
 
@@ -91,7 +94,7 @@ Anything stored there will be replaced.
 
 1. **Close the app**, unplug the amp from the PC, and **plug it back into the Pi**.
    Power-cycle the amp if anything seems stuck (protocol.md section 9).
-2. Copy the `captures\windows` folder to the Pi, or just tell me it's done; I can copy it.
+2. Copy the `captures\windows` folder to the Pi.
 3. Don't send or share the `.pcapng` files elsewhere. They only hold USB traffic to the
    amp, but keep them with the project like the other captures.
 
