@@ -13,4 +13,4 @@ venv/
 
 login.json
 
-app_data/
+app_data/*.pcapng
