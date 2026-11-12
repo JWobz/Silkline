@@ -63,11 +63,11 @@ $ silkline
 connected. log lines hidden: "log on" shows them. "help" lists the commands.
 silkline> preset jungle
 Found preset 8 Jungle $lash
-Preset Loaded: Jungle $lash
+√ loaded #8 Jungle $lash
 silkline> set bass 0.3
 bass: 0.3
 silkline> off reverb
-reverb on, off
+reverb on off
 ```
 
 | Command | What it does |
